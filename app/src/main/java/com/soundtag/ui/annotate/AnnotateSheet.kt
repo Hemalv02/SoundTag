@@ -59,6 +59,7 @@ fun AnnotateSheetContent(
     location: LocationFix?,
     onAnnotationChange: (AnnotationData) -> Unit,
     onSave: () -> Unit,
+    isSaving: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -237,12 +238,12 @@ fun AnnotateSheetContent(
                 .fillMaxWidth()
                 .height(52.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(SoundTagGreen)
-                .clickable(onClick = onSave),
+                .background(if (isSaving) SoundTagGreen.copy(alpha = 0.5f) else SoundTagGreen)
+                .clickable(enabled = !isSaving, onClick = onSave),
             contentAlignment = Alignment.Center
         ) {
             Text(
-                text = "Save & Upload",
+                text = if (isSaving) "Saving\u2026" else "Save & Upload",
                 fontSize = 15.sp,
                 fontWeight = FontWeight.SemiBold,
                 color = SoundTagBackground

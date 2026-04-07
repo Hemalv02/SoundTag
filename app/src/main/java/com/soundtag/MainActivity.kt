@@ -19,14 +19,17 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -41,6 +44,7 @@ import com.soundtag.service.RecordingState
 import com.soundtag.ui.annotate.AnnotateSheetContent
 import com.soundtag.ui.record.RecordScreen
 import com.soundtag.ui.theme.SoundTagBackground
+import com.soundtag.ui.theme.SoundTagGreen
 import com.soundtag.ui.theme.SoundTagSurface
 import com.soundtag.ui.theme.SoundTagSurfaceVariant
 import com.soundtag.ui.theme.SoundTagTextPrimary
@@ -48,6 +52,7 @@ import com.soundtag.ui.theme.SoundTagTextSecondary
 import com.soundtag.ui.theme.SoundTagTextTertiary
 import com.soundtag.ui.theme.SoundTagTheme
 import com.soundtag.viewmodel.RecordingViewModel
+import com.soundtag.viewmodel.SaveResult
 import com.soundtag.viewmodel.UiState
 import java.time.format.DateTimeFormatter
 
@@ -68,6 +73,9 @@ class MainActivity : ComponentActivity() {
                 val elapsed by vm.elapsedSeconds.collectAsState()
                 val annotation by vm.annotation.collectAsState()
                 val hasPerms by vm.hasPermissions.collectAsState()
+                val saveResult by vm.saveResult.collectAsState()
+
+                val snackbarHostState = remember { SnackbarHostState() }
 
                 // Permission launcher
                 val permLauncher = rememberLauncherForActivityResult(
@@ -93,103 +101,135 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    color = SoundTagBackground
-                ) {
-                    if (!hasPerms) {
-                        // Permission denied state
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(32.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
+                // Show snackbar on save result
+                LaunchedEffect(saveResult) {
+                    when (val result = saveResult) {
+                        is SaveResult.Success -> {
+                            snackbarHostState.showSnackbar("Saved ${result.filename}")
+                            vm.clearSaveResult()
+                        }
+                        is SaveResult.Error -> {
+                            snackbarHostState.showSnackbar(result.message)
+                            vm.clearSaveResult()
+                        }
+                        null -> {}
+                    }
+                }
+
+                Scaffold(
+                    containerColor = SoundTagBackground,
+                    snackbarHost = {
+                        SnackbarHost(snackbarHostState) { data ->
+                            Snackbar(
+                                snackbarData = data,
+                                containerColor = SoundTagSurface,
+                                contentColor = SoundTagTextPrimary,
+                                actionColor = SoundTagGreen
+                            )
+                        }
+                    }
+                ) { padding ->
+                    Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+                        if (!hasPerms) {
+                            // Permission denied state
                             Column(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(SoundTagSurface, RoundedCornerShape(16.dp))
-                                    .padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.spacedBy(12.dp)
+                                    .fillMaxSize()
+                                    .padding(32.dp),
+                                verticalArrangement = Arrangement.Center,
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text(
-                                    text = "Permissions Required",
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = SoundTagTextPrimary
-                                )
-                                Text(
-                                    text = "SoundTag needs microphone and location access to record audio with GPS metadata.",
-                                    fontSize = 14.sp,
-                                    color = SoundTagTextSecondary,
-                                    textAlign = TextAlign.Center
-                                )
-                                Text(
-                                    text = "Please grant permissions in Settings.",
-                                    fontSize = 13.sp,
-                                    color = SoundTagTextTertiary,
-                                    textAlign = TextAlign.Center
-                                )
-                            }
-                        }
-                    } else {
-                        // Extract location from service state
-                        val location = (serviceState as? RecordingState.Recording)?.location
-
-                        RecordScreen(
-                            isRecording = uiState is UiState.Recording || serviceState is RecordingState.Recording,
-                            elapsedSeconds = elapsed,
-                            location = location,
-                            onToggleRecording = {
-                                when (uiState) {
-                                    is UiState.Recording -> vm.stopRecording(context)
-                                    is UiState.Idle -> vm.startRecording(context)
-                                    else -> {}
-                                }
-                            }
-                        )
-
-                        // Annotation bottom sheet
-                        if (uiState is UiState.Annotating) {
-                            val annotatingState = uiState as UiState.Annotating
-                            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-                            ModalBottomSheet(
-                                onDismissRequest = { vm.dismissAnnotation() },
-                                sheetState = sheetState,
-                                containerColor = SoundTagSurfaceVariant,
-                                dragHandle = null
-                            ) {
-                                // Custom handle
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(top = 12.dp, bottom = 8.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
+                                        .background(SoundTagSurface, RoundedCornerShape(16.dp))
+                                        .padding(24.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .height(4.dp)
-                                            .fillMaxWidth(0.1f)
-                                            .background(
-                                                com.soundtag.ui.theme.SoundTagBorder,
-                                                RoundedCornerShape(2.dp)
-                                            )
+                                    Text(
+                                        text = "Permissions Required",
+                                        fontSize = 18.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SoundTagTextPrimary
+                                    )
+                                    Text(
+                                        text = "SoundTag needs microphone and location access to record audio with GPS metadata.",
+                                        fontSize = 14.sp,
+                                        color = SoundTagTextSecondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = "Please grant permissions in Settings.",
+                                        fontSize = 13.sp,
+                                        color = SoundTagTextTertiary,
+                                        textAlign = TextAlign.Center
                                     )
                                 }
+                            }
+                        } else {
+                            val location = (serviceState as? RecordingState.Recording)?.location
 
-                                AnnotateSheetContent(
-                                    annotation = annotation,
-                                    durationSeconds = annotatingState.durationSeconds,
-                                    recordingTime = annotatingState.startTime.format(
-                                        DateTimeFormatter.ofPattern("h:mm a")
-                                    ),
-                                    location = annotatingState.location,
-                                    onAnnotationChange = { vm.updateAnnotation(it) },
-                                    onSave = { vm.saveRecording() }
-                                )
+                            RecordScreen(
+                                isRecording = uiState is UiState.Recording || serviceState is RecordingState.Recording,
+                                elapsedSeconds = elapsed,
+                                location = location,
+                                onToggleRecording = {
+                                    when (uiState) {
+                                        is UiState.Recording -> vm.stopRecording(context)
+                                        is UiState.Idle -> vm.startRecording(context)
+                                        else -> {}
+                                    }
+                                }
+                            )
+
+                            // Annotation bottom sheet
+                            if (uiState is UiState.Annotating || uiState is UiState.Saving) {
+                                val annotatingState = when (uiState) {
+                                    is UiState.Annotating -> uiState as UiState.Annotating
+                                    else -> null
+                                }
+
+                                if (annotatingState != null) {
+                                    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+                                    ModalBottomSheet(
+                                        onDismissRequest = { vm.dismissAnnotation() },
+                                        sheetState = sheetState,
+                                        containerColor = SoundTagSurfaceVariant,
+                                        dragHandle = null
+                                    ) {
+                                        // Custom handle
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(top = 12.dp, bottom = 8.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .height(4.dp)
+                                                    .fillMaxWidth(0.1f)
+                                                    .background(
+                                                        com.soundtag.ui.theme.SoundTagBorder,
+                                                        RoundedCornerShape(2.dp)
+                                                    )
+                                            )
+                                        }
+
+                                        AnnotateSheetContent(
+                                            annotation = annotation,
+                                            durationSeconds = annotatingState.durationSeconds,
+                                            recordingTime = annotatingState.startTime.format(
+                                                DateTimeFormatter.ofPattern("h:mm a")
+                                            ),
+                                            location = annotatingState.location,
+                                            onAnnotationChange = { vm.updateAnnotation(it) },
+                                            onSave = { vm.saveRecording(context) },
+                                            isSaving = uiState is UiState.Saving
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

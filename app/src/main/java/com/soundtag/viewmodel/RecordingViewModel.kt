@@ -3,13 +3,17 @@ package com.soundtag.viewmodel
 import android.content.Context
 import android.content.Intent
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import com.soundtag.data.AnnotationData
+import com.soundtag.data.FileSaver
 import com.soundtag.data.LocationFix
+import com.soundtag.data.MetadataWriter
 import com.soundtag.service.RecordingService
 import com.soundtag.service.RecordingState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import java.io.File
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -23,6 +27,12 @@ sealed class UiState {
         val tempFile: File,
         val durationSeconds: Long
     ) : UiState()
+    data object Saving : UiState()
+}
+
+sealed class SaveResult {
+    data class Success(val filename: String) : SaveResult()
+    data class Error(val message: String) : SaveResult()
 }
 
 class RecordingViewModel : ViewModel() {
@@ -39,8 +49,15 @@ class RecordingViewModel : ViewModel() {
     private val _hasPermissions = MutableStateFlow(false)
     val hasPermissions: StateFlow<Boolean> = _hasPermissions.asStateFlow()
 
+    private val _saveResult = MutableStateFlow<SaveResult?>(null)
+    val saveResult: StateFlow<SaveResult?> = _saveResult.asStateFlow()
+
     fun setPermissionsGranted(granted: Boolean) {
         _hasPermissions.value = granted
+    }
+
+    fun clearSaveResult() {
+        _saveResult.value = null
     }
 
     fun startRecording(context: Context) {
@@ -52,7 +69,6 @@ class RecordingViewModel : ViewModel() {
     }
 
     fun stopRecording(context: Context) {
-        // Capture current recording state before stopping
         val currentState = RecordingService.state.value
         val duration = RecordingService.elapsedSeconds.value
 
@@ -83,10 +99,42 @@ class RecordingViewModel : ViewModel() {
         _annotation.value = data
     }
 
-    fun saveRecording() {
-        // Placeholder — actual file saving wired in next phase
-        _annotation.value = AnnotationData()
-        _uiState.value = UiState.Idle
+    fun saveRecording(context: Context) {
+        val state = _uiState.value
+        if (state !is UiState.Annotating) return
+
+        val currentAnnotation = _annotation.value
+        val filename = currentAnnotation.fileName.ifEmpty {
+            "misc_${state.startTime.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))}"
+        }
+
+        _uiState.value = UiState.Saving
+
+        viewModelScope.launch {
+            val json = MetadataWriter.buildJson(
+                filename = filename,
+                annotation = currentAnnotation,
+                startTime = state.startTime,
+                location = state.location,
+                durationSeconds = state.durationSeconds
+            )
+
+            val uri = FileSaver.saveRecording(
+                context = context,
+                audioFile = state.tempFile,
+                desiredName = filename,
+                jsonContent = json
+            )
+
+            if (uri != null) {
+                _saveResult.value = SaveResult.Success("$filename.m4a")
+            } else {
+                _saveResult.value = SaveResult.Error("Failed to save recording")
+            }
+
+            _annotation.value = AnnotationData()
+            _uiState.value = UiState.Idle
+        }
     }
 
     fun dismissAnnotation() {
