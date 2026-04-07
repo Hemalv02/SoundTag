@@ -105,12 +105,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(saveResult) {
                     when (val result = saveResult) {
                         is SaveResult.Success -> {
-                            val msg = if (result.uploaded) {
-                                "Saved & uploaded ${result.filename}"
-                            } else {
-                                "Saved ${result.filename} (upload failed — will retry)"
-                            }
-                            snackbarHostState.showSnackbar(msg)
+                            snackbarHostState.showSnackbar("Saved ${result.filename}")
                             vm.clearSaveResult()
                         }
                         is SaveResult.Error -> {

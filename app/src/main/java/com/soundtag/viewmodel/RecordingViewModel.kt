@@ -6,10 +6,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.soundtag.data.AnnotationData
 import com.soundtag.data.FileSaver
-import com.soundtag.data.FirebaseUploader
 import com.soundtag.data.LocationFix
 import com.soundtag.data.MetadataWriter
-import com.soundtag.data.UploadStatus
 import com.soundtag.service.RecordingService
 import com.soundtag.service.RecordingState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,7 +31,7 @@ sealed class UiState {
 }
 
 sealed class SaveResult {
-    data class Success(val filename: String, val uploaded: Boolean) : SaveResult()
+    data class Success(val filename: String) : SaveResult()
     data class Error(val message: String) : SaveResult()
 }
 
@@ -53,9 +51,6 @@ class RecordingViewModel : ViewModel() {
 
     private val _saveResult = MutableStateFlow<SaveResult?>(null)
     val saveResult: StateFlow<SaveResult?> = _saveResult.asStateFlow()
-
-    private val _uploadStatus = MutableStateFlow<UploadStatus>(UploadStatus.Idle)
-    val uploadStatus: StateFlow<UploadStatus> = _uploadStatus.asStateFlow()
 
     fun setPermissionsGranted(granted: Boolean) {
         _hasPermissions.value = granted
@@ -114,7 +109,6 @@ class RecordingViewModel : ViewModel() {
         }
 
         _uiState.value = UiState.Saving
-        _uploadStatus.value = UploadStatus.Uploading(0)
 
         viewModelScope.launch {
             val json = MetadataWriter.buildJson(
@@ -125,17 +119,6 @@ class RecordingViewModel : ViewModel() {
                 durationSeconds = state.durationSeconds
             )
 
-            // Upload to Firebase Storage FIRST (before local save deletes temp file)
-            _uploadStatus.value = UploadStatus.Uploading(50)
-            val uploadResult = FirebaseUploader.uploadRecording(
-                audioFile = state.tempFile,
-                jsonContent = json,
-                filename = filename
-            )
-            val uploaded = uploadResult is UploadStatus.Success
-            _uploadStatus.value = uploadResult
-
-            // Save locally (this deletes the temp file)
             val uri = FileSaver.saveRecording(
                 context = context,
                 audioFile = state.tempFile,
@@ -144,9 +127,9 @@ class RecordingViewModel : ViewModel() {
             )
 
             if (uri != null) {
-                _saveResult.value = SaveResult.Success("$filename.m4a", uploaded = uploaded)
+                _saveResult.value = SaveResult.Success("$filename.m4a")
             } else {
-                _saveResult.value = SaveResult.Error("Failed to save recording locally")
+                _saveResult.value = SaveResult.Error("Failed to save recording")
             }
 
             _annotation.value = AnnotationData()
