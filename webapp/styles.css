@@ -24,6 +24,15 @@ html,body{margin:0;background:var(--bg);color:var(--text);
 .timer{font-size:48px;font-weight:700;font-variant-numeric:tabular-nums;
   color:var(--brand)}
 .state{color:var(--muted);font-size:13px;margin-top:6px}
+.controls{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
+.btn{flex:1;min-width:120px;padding:12px 16px;border-radius:12px;
+  border:1px solid var(--border);background:transparent;color:var(--text);
+  font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
+.btn:hover:not(:disabled){border-color:var(--brand)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary{background:var(--brand);color:#00261A;border-color:var(--brand)}
+.btn-primary:hover:not(:disabled){filter:brightness(1.1)}
+audio{width:100%;margin-top:12px}
 .snackbar{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
   background:var(--surface);border:1px solid var(--border);
   padding:12px 18px;border-radius:12px;font-size:14px;
