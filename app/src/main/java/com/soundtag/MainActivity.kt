@@ -20,14 +20,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -64,7 +61,6 @@ import java.time.format.DateTimeFormatter
 
 class MainActivity : ComponentActivity() {
 
-    @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
@@ -167,6 +163,23 @@ class MainActivity : ComponentActivity() {
                                     onBack = { vm.browseBack() }
                                 )
                             }
+                            uiState is UiState.Annotating || uiState is UiState.Saving -> {
+                                val annotatingState = uiState as? UiState.Annotating
+                                if (annotatingState != null) {
+                                    AnnotateSheetContent(
+                                        annotation = annotation,
+                                        durationSeconds = annotatingState.durationSeconds,
+                                        recordingTime = annotatingState.startTime.format(DateTimeFormatter.ofPattern("h:mm a")),
+                                        location = annotatingState.location,
+                                        onAnnotationChange = { vm.updateAnnotation(it) },
+                                        onSave = { vm.saveRecording(context) },
+                                        onBack = { vm.dismissAnnotation() },
+                                        isSaving = uiState is UiState.Saving,
+                                        isDriveConnected = isDriveConnected,
+                                        annotatorId = annotatorId
+                                    )
+                                }
+                            }
                             showSetup -> {
                                 SetupScreen(
                                     name = annotatorName,
@@ -244,41 +257,6 @@ class MainActivity : ComponentActivity() {
                                     onDashboardTap = { vm.openDashboard() }
                                 )
 
-                                if (uiState is UiState.Annotating || uiState is UiState.Saving) {
-                                    val annotatingState = uiState as? UiState.Annotating
-                                    if (annotatingState != null) {
-                                        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-                                        ModalBottomSheet(
-                                            onDismissRequest = { vm.dismissAnnotation() },
-                                            sheetState = sheetState,
-                                            containerColor = SoundTagSurfaceVariant,
-                                            dragHandle = null
-                                        ) {
-                                            Column(
-                                                modifier = Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp),
-                                                horizontalAlignment = Alignment.CenterHorizontally
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .height(4.dp)
-                                                        .fillMaxWidth(0.1f)
-                                                        .background(SoundTagBorder, RoundedCornerShape(2.dp))
-                                                )
-                                            }
-                                            AnnotateSheetContent(
-                                                annotation = annotation,
-                                                durationSeconds = annotatingState.durationSeconds,
-                                                recordingTime = annotatingState.startTime.format(DateTimeFormatter.ofPattern("h:mm a")),
-                                                location = annotatingState.location,
-                                                onAnnotationChange = { vm.updateAnnotation(it) },
-                                                onSave = { vm.saveRecording(context) },
-                                                isSaving = uiState is UiState.Saving,
-                                                isDriveConnected = isDriveConnected,
-                                                annotatorId = annotatorId
-                                            )
-                                        }
-                                    }
-                                }
                             }
                         }
                     }
