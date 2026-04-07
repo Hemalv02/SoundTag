@@ -33,7 +33,7 @@ object DriveUploader {
     fun getSignInIntent(context: Context): Intent {
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestEmail()
-            .requestScopes(Scope(DriveScopes.DRIVE_FILE))
+            .requestScopes(Scope(DriveScopes.DRIVE))
             .build()
         return GoogleSignIn.getClient(context, gso).signInIntent
     }
@@ -49,7 +49,7 @@ object DriveUploader {
 
     fun isSignedIn(context: Context): Boolean {
         val account = GoogleSignIn.getLastSignedInAccount(context)
-        return account != null && account.grantedScopes.contains(Scope(DriveScopes.DRIVE_FILE))
+        return account != null && account.grantedScopes.contains(Scope(DriveScopes.DRIVE))
     }
 
     fun getSignedInEmail(context: Context): String? {
@@ -143,7 +143,7 @@ object DriveUploader {
     private fun buildDriveService(context: Context): Drive? {
         val account = GoogleSignIn.getLastSignedInAccount(context) ?: return null
         val credential = GoogleAccountCredential.usingOAuth2(
-            context, listOf(DriveScopes.DRIVE_FILE)
+            context, listOf(DriveScopes.DRIVE)
         )
         credential.selectedAccount = account.account
         return Drive.Builder(
