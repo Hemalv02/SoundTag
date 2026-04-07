@@ -2,6 +2,7 @@ package com.soundtag.data
 
 import android.content.Context
 import android.content.Intent
+import android.util.Log
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.android.gms.common.api.Scope
@@ -49,7 +50,7 @@ object DriveUploader {
 
     fun isSignedIn(context: Context): Boolean {
         val account = GoogleSignIn.getLastSignedInAccount(context)
-        return account != null && account.grantedScopes.contains(Scope(DriveScopes.DRIVE))
+        return account != null
     }
 
     fun getSignedInEmail(context: Context): String? {
@@ -145,8 +146,10 @@ object DriveUploader {
                 .execute()
             jsonFile.delete()
 
+            Log.d("DriveUploader", "Upload success: $filename")
             UploadResult.Success
         } catch (e: Exception) {
+            Log.e("DriveUploader", "Upload failed: $filename", e)
             UploadResult.Failed(e.message ?: "Upload failed")
         }
     }

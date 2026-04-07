@@ -1,6 +1,7 @@
 package com.soundtag.service
 
 import android.content.Context
+import android.util.Log
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
@@ -23,10 +24,12 @@ class UploadWorker(
         val repo = RecordingRepository(applicationContext as android.app.Application)
 
         if (!DriveUploader.isSignedIn(applicationContext)) {
-            return Result.retry()
+            Log.w("UploadWorker", "Not signed in, skipping")
+            return Result.failure()
         }
 
         val pending = queueManager.getPendingFiles()
+        Log.d("UploadWorker", "Pending uploads: ${pending.size}")
         if (pending.isEmpty()) return Result.success()
 
         var allSucceeded = true
@@ -44,10 +47,12 @@ class UploadWorker(
 
             when (result) {
                 is UploadResult.Success -> {
+                    Log.d("UploadWorker", "Uploaded: ${upload.filename}")
                     queueManager.removePending(upload.filename)
                     repo.updateUploadStatus(upload.filename, "uploaded")
                 }
                 is UploadResult.Failed -> {
+                    Log.e("UploadWorker", "Failed: ${upload.filename} - ${result.message}")
                     repo.updateUploadStatus(upload.filename, "failed")
                     allSucceeded = false
                 }
