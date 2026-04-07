@@ -29,9 +29,9 @@ class AudioPlayer {
 
     fun playFile(file: File, scope: CoroutineScope) {
         val path = file.absolutePath
-        if (_state.value.isPlaying && _state.value.currentFile == path) {
-            pause()
-            return
+        if (_state.value.currentFile == path) {
+            if (_state.value.isPlaying) { pause(); return }
+            // Finished or paused — restart
         }
         stop()
         try {
@@ -39,7 +39,7 @@ class AudioPlayer {
                 setDataSource(path)
                 prepare()
                 start()
-                setOnCompletionListener { stop() }
+                setOnCompletionListener { onPlaybackComplete() }
             }
             _state.value = PlaybackState(
                 isPlaying = true,
@@ -53,9 +53,8 @@ class AudioPlayer {
     }
 
     fun playUri(context: Context, uri: Uri, identifier: String, scope: CoroutineScope) {
-        if (_state.value.isPlaying && _state.value.currentFile == identifier) {
-            pause()
-            return
+        if (_state.value.currentFile == identifier) {
+            if (_state.value.isPlaying) { pause(); return }
         }
         stop()
         try {
@@ -63,7 +62,7 @@ class AudioPlayer {
                 setDataSource(context, uri)
                 prepare()
                 start()
-                setOnCompletionListener { stop() }
+                setOnCompletionListener { onPlaybackComplete() }
             }
             _state.value = PlaybackState(
                 isPlaying = true,
@@ -88,6 +87,15 @@ class AudioPlayer {
         mediaPlayer?.release()
         mediaPlayer = null
         _state.value = PlaybackState()
+    }
+
+    private fun onPlaybackComplete() {
+        tickerJob?.cancel()
+        tickerJob = null
+        _state.value = _state.value.copy(
+            isPlaying = false,
+            positionMs = _state.value.durationMs
+        )
     }
 
     private fun startTicker(scope: CoroutineScope) {
