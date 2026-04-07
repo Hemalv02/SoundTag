@@ -1,6 +1,7 @@
 import { getLocation, formatGps } from "./location.js";
 import { Recorder, formatTimer, MAX_DURATION_MS } from "./recorder.js";
 import { buildMetadata, saveLocally } from "./metadata.js";
+import { uploadRecording } from "./upload.js";
 import {
   LABELS, SEVERITY, ENVIRONMENTS, CONTEXTS,
   defaultSelections, renderChipGroup, autoFilename,
@@ -123,7 +124,16 @@ function onSaveLocal() {
 
 recordBtn.addEventListener("click", startRecording);
 stopBtn.addEventListener("click", stopRecording);
+async function onUploadNow() {
+  if (!lastRecording) return toast("No recording", "error");
+  toast("Uploading\u2026");
+  const res = await uploadRecording(lastRecording.blob, currentMetadata());
+  if (res.ok) toast("Uploaded", "success");
+  else toast("Upload failed: " + res.error, "error");
+}
+
 $("saveLocalBtn").addEventListener("click", onSaveLocal);
+$("uploadNowBtn").addEventListener("click", onUploadNow);
 
 renderAllChips();
 refreshGps();
