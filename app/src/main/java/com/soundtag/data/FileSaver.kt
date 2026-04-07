@@ -58,7 +58,7 @@ object FileSaver {
         val values = ContentValues().apply {
             put(MediaStore.Files.FileColumns.DISPLAY_NAME, "$name.json")
             put(MediaStore.Files.FileColumns.MIME_TYPE, "application/json")
-            put(MediaStore.Files.FileColumns.RELATIVE_PATH, "Music/SoundTag")
+            put(MediaStore.Files.FileColumns.RELATIVE_PATH, "Documents/SoundTag")
             put(MediaStore.Files.FileColumns.IS_PENDING, 1)
         }
 
