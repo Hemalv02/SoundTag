@@ -17,7 +17,8 @@ object MetadataWriter {
         annotation: AnnotationData,
         startTime: ZonedDateTime,
         location: LocationFix?,
-        durationSeconds: Long
+        durationSeconds: Long,
+        annotatorId: String = "unknown"
     ): String {
         val root = JSONObject()
 
@@ -77,7 +78,7 @@ object MetadataWriter {
             put("model", "${Build.MANUFACTURER} ${Build.MODEL}")
             put("android_version", Build.VERSION.RELEASE)
             put("app_version", "1.0.0")
-            put("annotator_id", "HML-01")
+            put("annotator_id", annotatorId)
         }
         root.put("device", device)
 

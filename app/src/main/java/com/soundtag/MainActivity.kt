@@ -12,7 +12,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,7 +42,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.soundtag.service.RecordingState
 import com.soundtag.ui.annotate.AnnotateSheetContent
 import com.soundtag.ui.record.RecordScreen
+import com.soundtag.ui.setup.SetupScreen
 import com.soundtag.ui.theme.SoundTagBackground
+import com.soundtag.ui.theme.SoundTagBorder
 import com.soundtag.ui.theme.SoundTagGreen
 import com.soundtag.ui.theme.SoundTagSurface
 import com.soundtag.ui.theme.SoundTagSurfaceVariant
@@ -74,6 +75,10 @@ class MainActivity : ComponentActivity() {
                 val annotation by vm.annotation.collectAsState()
                 val hasPerms by vm.hasPermissions.collectAsState()
                 val saveResult by vm.saveResult.collectAsState()
+                val showSetup by vm.showSetup.collectAsState()
+                val annotatorName by vm.annotatorName.collectAsState()
+                val annotatorId by vm.annotatorId.collectAsState()
+                val isDriveConnected by vm.isDriveConnected.collectAsState()
 
                 val snackbarHostState = remember { SnackbarHostState() }
 
@@ -81,8 +86,14 @@ class MainActivity : ComponentActivity() {
                 val permLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions()
                 ) { results ->
-                    val allGranted = results.values.all { it }
-                    vm.setPermissionsGranted(allGranted)
+                    vm.setPermissionsGranted(results.values.all { it })
+                }
+
+                // Drive sign-in launcher
+                val driveSignInLauncher = rememberLauncherForActivityResult(
+                    ActivityResultContracts.StartActivityForResult()
+                ) { result ->
+                    vm.handleDriveSignIn(result.data)
                 }
 
                 // Check permissions on launch
@@ -101,11 +112,16 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Show snackbar on save result
+                // Snackbar on save result
                 LaunchedEffect(saveResult) {
                     when (val result = saveResult) {
                         is SaveResult.Success -> {
-                            snackbarHostState.showSnackbar("Saved ${result.filename}")
+                            val msg = if (result.uploaded) {
+                                "Saved & uploaded ${result.filename}"
+                            } else {
+                                "Saved ${result.filename}"
+                            }
+                            snackbarHostState.showSnackbar(msg)
                             vm.clearSaveResult()
                         }
                         is SaveResult.Error -> {
@@ -130,8 +146,21 @@ class MainActivity : ComponentActivity() {
                     }
                 ) { padding ->
                     Box(modifier = Modifier.fillMaxSize().padding(padding)) {
-                        if (!hasPerms) {
-                            // Permission denied state
+                        if (showSetup) {
+                            // Setup Screen
+                            SetupScreen(
+                                name = annotatorName,
+                                annotatorId = annotatorId,
+                                isDriveConnected = isDriveConnected,
+                                onNameChange = { vm.updateName(it) },
+                                onIdChange = { vm.updateId(it) },
+                                onConnectDrive = {
+                                    driveSignInLauncher.launch(vm.getSignInIntent())
+                                },
+                                onStartCollecting = { vm.completeSetup() }
+                            )
+                        } else if (!hasPerms) {
+                            // Permission denied
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -159,36 +188,30 @@ class MainActivity : ComponentActivity() {
                                         color = SoundTagTextSecondary,
                                         textAlign = TextAlign.Center
                                     )
-                                    Text(
-                                        text = "Please grant permissions in Settings.",
-                                        fontSize = 13.sp,
-                                        color = SoundTagTextTertiary,
-                                        textAlign = TextAlign.Center
-                                    )
                                 }
                             }
                         } else {
+                            // Record Screen
                             val location = (serviceState as? RecordingState.Recording)?.location
 
                             RecordScreen(
                                 isRecording = uiState is UiState.Recording || serviceState is RecordingState.Recording,
                                 elapsedSeconds = elapsed,
                                 location = location,
+                                annotatorId = annotatorId,
                                 onToggleRecording = {
                                     when (uiState) {
                                         is UiState.Recording -> vm.stopRecording(context)
                                         is UiState.Idle -> vm.startRecording(context)
                                         else -> {}
                                     }
-                                }
+                                },
+                                onSettingsTap = { vm.openSetup() }
                             )
 
                             // Annotation bottom sheet
                             if (uiState is UiState.Annotating || uiState is UiState.Saving) {
-                                val annotatingState = when (uiState) {
-                                    is UiState.Annotating -> uiState as UiState.Annotating
-                                    else -> null
-                                }
+                                val annotatingState = uiState as? UiState.Annotating
 
                                 if (annotatingState != null) {
                                     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -199,7 +222,6 @@ class MainActivity : ComponentActivity() {
                                         containerColor = SoundTagSurfaceVariant,
                                         dragHandle = null
                                     ) {
-                                        // Custom handle
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth()
@@ -210,10 +232,7 @@ class MainActivity : ComponentActivity() {
                                                 modifier = Modifier
                                                     .height(4.dp)
                                                     .fillMaxWidth(0.1f)
-                                                    .background(
-                                                        com.soundtag.ui.theme.SoundTagBorder,
-                                                        RoundedCornerShape(2.dp)
-                                                    )
+                                                    .background(SoundTagBorder, RoundedCornerShape(2.dp))
                                             )
                                         }
 
@@ -226,7 +245,9 @@ class MainActivity : ComponentActivity() {
                                             location = annotatingState.location,
                                             onAnnotationChange = { vm.updateAnnotation(it) },
                                             onSave = { vm.saveRecording(context) },
-                                            isSaving = uiState is UiState.Saving
+                                            isSaving = uiState is UiState.Saving,
+                                            isDriveConnected = isDriveConnected,
+                                            annotatorId = annotatorId
                                         )
                                     }
                                 }

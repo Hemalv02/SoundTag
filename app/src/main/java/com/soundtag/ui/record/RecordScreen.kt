@@ -38,7 +38,9 @@ fun RecordScreen(
     isRecording: Boolean,
     elapsedSeconds: Long,
     location: LocationFix?,
+    annotatorId: String,
     onToggleRecording: () -> Unit,
+    onSettingsTap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val accentColor = if (isRecording) SoundTagError else SoundTagGreen
@@ -51,7 +53,7 @@ fun RecordScreen(
             .background(SoundTagBackground)
     ) {
         // Top bar
-        TopBar(isRecording = isRecording)
+        TopBar(isRecording = isRecording, annotatorId = annotatorId, onSettingsTap = onSettingsTap)
 
         // Colored strip
         Box(
@@ -159,7 +161,7 @@ fun RecordScreen(
 }
 
 @Composable
-private fun TopBar(isRecording: Boolean) {
+private fun TopBar(isRecording: Boolean, annotatorId: String, onSettingsTap: () -> Unit) {
     val dotColor = if (isRecording) SoundTagError else SoundTagGreen
 
     Row(
@@ -187,7 +189,7 @@ private fun TopBar(isRecording: Boolean) {
             )
             Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "HML-01",
+                text = annotatorId.ifEmpty { "---" },
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold,
                 fontFamily = FontFamily.Monospace,
@@ -203,12 +205,13 @@ private fun TopBar(isRecording: Boolean) {
             color = SoundTagTextPrimary
         )
 
-        // Grid button
+        // Settings button
         Box(
             modifier = Modifier
                 .size(36.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(SoundTagSurface),
+                .background(SoundTagSurface)
+                .clickable(onClick = onSettingsTap),
             contentAlignment = Alignment.Center
         ) {
             Text(

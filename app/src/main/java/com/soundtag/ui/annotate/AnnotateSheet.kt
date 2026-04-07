@@ -60,6 +60,8 @@ fun AnnotateSheetContent(
     onAnnotationChange: (AnnotationData) -> Unit,
     onSave: () -> Unit,
     isSaving: Boolean = false,
+    isDriveConnected: Boolean = false,
+    annotatorId: String = "",
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -253,7 +255,7 @@ fun AnnotateSheetContent(
         Spacer(modifier = Modifier.height(12.dp))
 
         Text(
-            text = "Saves to Drive under HML-01/",
+            text = if (isDriveConnected) "Saves to Drive under $annotatorId/" else "Saves locally to Music/SoundTag/",
             fontSize = 12.sp,
             color = SoundTagTextTertiary,
             textAlign = TextAlign.Center,

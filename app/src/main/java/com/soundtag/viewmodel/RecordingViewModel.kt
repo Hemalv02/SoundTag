@@ -1,13 +1,17 @@
 package com.soundtag.viewmodel
 
+import android.app.Application
 import android.content.Context
 import android.content.Intent
-import androidx.lifecycle.ViewModel
+import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.soundtag.data.AnnotationData
+import com.soundtag.data.DriveUploader
 import com.soundtag.data.FileSaver
 import com.soundtag.data.LocationFix
 import com.soundtag.data.MetadataWriter
+import com.soundtag.data.UploadResult
+import com.soundtag.data.UserPreferences
 import com.soundtag.service.RecordingService
 import com.soundtag.service.RecordingState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,11 +35,13 @@ sealed class UiState {
 }
 
 sealed class SaveResult {
-    data class Success(val filename: String) : SaveResult()
+    data class Success(val filename: String, val uploaded: Boolean) : SaveResult()
     data class Error(val message: String) : SaveResult()
 }
 
-class RecordingViewModel : ViewModel() {
+class RecordingViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val prefs = UserPreferences(application)
 
     val serviceState: StateFlow<RecordingState> = RecordingService.state
     val elapsedSeconds: StateFlow<Long> = RecordingService.elapsedSeconds
@@ -52,6 +58,22 @@ class RecordingViewModel : ViewModel() {
     private val _saveResult = MutableStateFlow<SaveResult?>(null)
     val saveResult: StateFlow<SaveResult?> = _saveResult.asStateFlow()
 
+    // Setup state
+    private val _isSetupComplete = MutableStateFlow(prefs.isSetupComplete)
+    val isSetupComplete: StateFlow<Boolean> = _isSetupComplete.asStateFlow()
+
+    private val _annotatorName = MutableStateFlow(prefs.annotatorName)
+    val annotatorName: StateFlow<String> = _annotatorName.asStateFlow()
+
+    private val _annotatorId = MutableStateFlow(prefs.annotatorId)
+    val annotatorId: StateFlow<String> = _annotatorId.asStateFlow()
+
+    private val _isDriveConnected = MutableStateFlow(DriveUploader.isSignedIn(application))
+    val isDriveConnected: StateFlow<Boolean> = _isDriveConnected.asStateFlow()
+
+    private val _showSetup = MutableStateFlow(!prefs.isSetupComplete)
+    val showSetup: StateFlow<Boolean> = _showSetup.asStateFlow()
+
     fun setPermissionsGranted(granted: Boolean) {
         _hasPermissions.value = granted
     }
@@ -60,6 +82,44 @@ class RecordingViewModel : ViewModel() {
         _saveResult.value = null
     }
 
+    // Setup
+    fun updateName(name: String) {
+        _annotatorName.value = name
+    }
+
+    fun updateId(id: String) {
+        _annotatorId.value = id
+    }
+
+    fun completeSetup() {
+        prefs.annotatorName = _annotatorName.value
+        prefs.annotatorId = _annotatorId.value
+        prefs.isSetupComplete = true
+        _isSetupComplete.value = true
+        _showSetup.value = false
+    }
+
+    fun openSetup() {
+        _showSetup.value = true
+    }
+
+    fun closeSetup() {
+        if (_isSetupComplete.value) {
+            _showSetup.value = false
+        }
+    }
+
+    // Drive
+    fun getSignInIntent(): Intent {
+        return DriveUploader.getSignInIntent(getApplication())
+    }
+
+    fun handleDriveSignIn(data: Intent?) {
+        val success = DriveUploader.handleSignInResult(data)
+        _isDriveConnected.value = success
+    }
+
+    // Recording
     fun startRecording(context: Context) {
         val intent = Intent(context, RecordingService::class.java).apply {
             action = RecordingService.ACTION_START
@@ -104,6 +164,7 @@ class RecordingViewModel : ViewModel() {
         if (state !is UiState.Annotating) return
 
         val currentAnnotation = _annotation.value
+        val aid = _annotatorId.value.ifEmpty { "unknown" }
         val filename = currentAnnotation.fileName.ifEmpty {
             "misc_${state.startTime.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))}"
         }
@@ -116,9 +177,24 @@ class RecordingViewModel : ViewModel() {
                 annotation = currentAnnotation,
                 startTime = state.startTime,
                 location = state.location,
-                durationSeconds = state.durationSeconds
+                durationSeconds = state.durationSeconds,
+                annotatorId = aid
             )
 
+            // Upload to Drive first if connected (before temp file is deleted)
+            var uploaded = false
+            if (_isDriveConnected.value) {
+                val result = DriveUploader.uploadRecording(
+                    context = context,
+                    audioFile = state.tempFile,
+                    jsonContent = json,
+                    filename = filename,
+                    annotatorId = aid
+                )
+                uploaded = result is UploadResult.Success
+            }
+
+            // Save locally (always)
             val uri = FileSaver.saveRecording(
                 context = context,
                 audioFile = state.tempFile,
@@ -127,7 +203,7 @@ class RecordingViewModel : ViewModel() {
             )
 
             if (uri != null) {
-                _saveResult.value = SaveResult.Success("$filename.m4a")
+                _saveResult.value = SaveResult.Success("$filename.m4a", uploaded = uploaded)
             } else {
                 _saveResult.value = SaveResult.Error("Failed to save recording")
             }
