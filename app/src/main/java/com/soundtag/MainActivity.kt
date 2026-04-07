@@ -164,16 +164,30 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                             uiState is UiState.Annotating || uiState is UiState.Saving -> {
-                                val annotatingState = uiState as? UiState.Annotating
-                                if (annotatingState != null) {
+                                val startTime = when (uiState) {
+                                    is UiState.Annotating -> (uiState as UiState.Annotating).startTime
+                                    is UiState.Saving -> (uiState as UiState.Saving).startTime
+                                    else -> null
+                                }
+                                val loc = when (uiState) {
+                                    is UiState.Annotating -> (uiState as UiState.Annotating).location
+                                    is UiState.Saving -> (uiState as UiState.Saving).location
+                                    else -> null
+                                }
+                                val dur = when (uiState) {
+                                    is UiState.Annotating -> (uiState as UiState.Annotating).durationSeconds
+                                    is UiState.Saving -> (uiState as UiState.Saving).durationSeconds
+                                    else -> 0L
+                                }
+                                if (startTime != null) {
                                     AnnotateSheetContent(
                                         annotation = annotation,
-                                        durationSeconds = annotatingState.durationSeconds,
-                                        recordingTime = annotatingState.startTime.format(DateTimeFormatter.ofPattern("h:mm a")),
-                                        location = annotatingState.location,
+                                        durationSeconds = dur,
+                                        recordingTime = startTime.format(DateTimeFormatter.ofPattern("h:mm a")),
+                                        location = loc,
                                         onAnnotationChange = { vm.updateAnnotation(it) },
                                         onSave = { vm.saveRecording(context) },
-                                        onBack = { vm.dismissAnnotation() },
+                                        onBack = { if (uiState !is UiState.Saving) vm.dismissAnnotation() },
                                         isSaving = uiState is UiState.Saving,
                                         isDriveConnected = isDriveConnected,
                                         annotatorId = annotatorId

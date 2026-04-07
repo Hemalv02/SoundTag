@@ -36,7 +36,11 @@ sealed class UiState {
         val tempFile: File,
         val durationSeconds: Long
     ) : UiState()
-    data object Saving : UiState()
+    data class Saving(
+        val startTime: ZonedDateTime,
+        val location: LocationFix?,
+        val durationSeconds: Long
+    ) : UiState()
 }
 
 sealed class SaveResult {
@@ -266,7 +270,11 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
             "misc_${state.startTime.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))}"
         }
 
-        _uiState.value = UiState.Saving
+        _uiState.value = UiState.Saving(
+            startTime = state.startTime,
+            location = state.location,
+            durationSeconds = state.durationSeconds
+        )
 
         viewModelScope.launch {
             val json = MetadataWriter.buildJson(
