@@ -13,7 +13,9 @@ data class RecordingEntry(
     val noiseType: String,
     val timestamp: Long,
     val durationSeconds: Long,
-    val uploadStatus: String
+    val uploadStatus: String,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 class RecordingRepository(application: Application) {
@@ -46,6 +48,9 @@ class RecordingRepository(application: Application) {
 
     fun getTotalDuration(): Long = loadAll().sumOf { it.durationSeconds }
 
+    fun getWithLocation(): List<RecordingEntry> =
+        loadAll().filter { it.latitude != null && it.longitude != null }
+
     fun updateUploadStatus(filename: String, status: String) {
         val list = loadAll().map {
             if (it.filename == filename) it.copy(uploadStatus = status) else it
@@ -66,7 +71,9 @@ class RecordingRepository(application: Application) {
                 noiseType = obj.optString("noiseType", "misc"),
                 timestamp = obj.getLong("timestamp"),
                 durationSeconds = obj.getLong("durationSeconds"),
-                uploadStatus = obj.optString("uploadStatus", "pending")
+                uploadStatus = obj.optString("uploadStatus", "pending"),
+                latitude = if (obj.has("latitude") && !obj.isNull("latitude")) obj.getDouble("latitude") else null,
+                longitude = if (obj.has("longitude") && !obj.isNull("longitude")) obj.getDouble("longitude") else null
             )
         }
     }
@@ -80,6 +87,8 @@ class RecordingRepository(application: Application) {
                 put("timestamp", entry.timestamp)
                 put("durationSeconds", entry.durationSeconds)
                 put("uploadStatus", entry.uploadStatus)
+                put("latitude", entry.latitude ?: JSONObject.NULL)
+                put("longitude", entry.longitude ?: JSONObject.NULL)
             })
         }
         prefs.edit().putString(key, arr.toString()).apply()

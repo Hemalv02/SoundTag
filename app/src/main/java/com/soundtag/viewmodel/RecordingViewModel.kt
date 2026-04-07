@@ -12,8 +12,10 @@ import com.soundtag.data.LocationFix
 import com.soundtag.data.MetadataWriter
 import com.soundtag.data.RecordingEntry
 import com.soundtag.data.RecordingRepository
+import com.soundtag.data.UploadQueueManager
 import com.soundtag.data.UploadResult
 import com.soundtag.data.UserPreferences
+import com.soundtag.service.UploadWorker
 import com.soundtag.service.RecordingService
 import com.soundtag.service.RecordingState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +47,7 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val prefs = UserPreferences(application)
     private val repo = RecordingRepository(application)
+    private val uploadQueue = UploadQueueManager(application)
 
     val serviceState: StateFlow<RecordingState> = RecordingService.state
     val elapsedSeconds: StateFlow<Long> = RecordingService.elapsedSeconds
@@ -135,14 +138,7 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     fun syncPending() {
-        if (!_isDriveConnected.value) return
-        val pending = repo.getPending()
-        viewModelScope.launch {
-            pending.forEach { entry ->
-                // We can't re-upload without the original file, so just mark as noted
-                // In a real app, we'd queue the files. For now this is a placeholder.
-            }
-        }
+        UploadWorker.enqueue(getApplication())
     }
 
     // Drive
@@ -211,7 +207,7 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
                 annotatorId = aid
             )
 
-            // Upload to Drive first if connected
+            // Upload to Drive first if connected (before temp file is deleted)
             var uploaded = false
             if (_isDriveConnected.value) {
                 val result = DriveUploader.uploadRecording(
@@ -224,7 +220,13 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
                 uploaded = result is UploadResult.Success
             }
 
-            // Save locally
+            // Queue for retry if not uploaded and Drive is configured
+            if (!uploaded && _isDriveConnected.value && state.tempFile.exists()) {
+                uploadQueue.queueForUpload(state.tempFile, json, filename, aid)
+                UploadWorker.enqueue(context)
+            }
+
+            // Save locally (this deletes the temp file)
             val uri = FileSaver.saveRecording(
                 context = context,
                 audioFile = state.tempFile,
@@ -232,10 +234,10 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
                 jsonContent = json
             )
 
-            // Track in repository
+            // Track in repository with location
             val uploadStatus = when {
                 uploaded -> "uploaded"
-                _isDriveConnected.value -> "failed"
+                _isDriveConnected.value -> "pending"
                 else -> "local"
             }
             repo.addRecording(
@@ -244,7 +246,9 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
                     noiseType = currentAnnotation.noiseType.ifEmpty { "misc" },
                     timestamp = state.startTime.toInstant().toEpochMilli(),
                     durationSeconds = state.durationSeconds,
-                    uploadStatus = uploadStatus
+                    uploadStatus = uploadStatus,
+                    latitude = state.location?.latitude,
+                    longitude = state.location?.longitude
                 )
             )
             refreshDashboardData()

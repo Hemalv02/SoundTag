@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -45,6 +46,7 @@ fun DashboardScreen(
     isDriveConnected: Boolean,
     onBack: () -> Unit,
     onSyncPending: () -> Unit,
+    onOpenMap: (Double, Double, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -104,7 +106,9 @@ fun DashboardScreen(
             1 -> DatasetStatsTab(
                 labelCounts = labelCounts,
                 totalCount = totalCount,
-                totalDuration = totalDuration
+                totalDuration = totalDuration,
+                recordingsWithLocation = recordings.filter { it.latitude != null && it.longitude != null },
+                onOpenMap = onOpenMap
             )
         }
     }
@@ -242,7 +246,9 @@ private fun RecordingsTab(
 private fun DatasetStatsTab(
     labelCounts: Map<String, Int>,
     totalCount: Int,
-    totalDuration: Long
+    totalDuration: Long,
+    recordingsWithLocation: List<RecordingEntry>,
+    onOpenMap: (Double, Double, String) -> Unit
 ) {
     val allLabels = listOf("traffic", "horn", "construction", "industrial", "crowd", "nature", "silence", "mixed")
     val maxCount = labelCounts.values.maxOrNull() ?: 1
@@ -342,6 +348,75 @@ private fun DatasetStatsTab(
                             color = SoundTagTextPrimary,
                             modifier = Modifier.width(30.dp)
                         )
+                    }
+                }
+            }
+        }
+
+        // Recording Locations
+        item {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(SoundTagSurface)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Recording Locations", fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = SoundTagTextPrimary)
+                    Text(
+                        text = "${recordingsWithLocation.size} with GPS",
+                        fontSize = 12.sp,
+                        color = SoundTagTextTertiary
+                    )
+                }
+
+                if (recordingsWithLocation.isEmpty()) {
+                    Text("No recordings with GPS data yet", fontSize = 13.sp, color = SoundTagTextTertiary)
+                } else {
+                    recordingsWithLocation.take(20).forEach { entry ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable {
+                                    onOpenMap(entry.latitude!!, entry.longitude!!, entry.filename)
+                                }
+                                .padding(vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(SoundTagGreen)
+                            )
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = entry.filename,
+                                    fontSize = 12.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = SoundTagTextPrimary
+                                )
+                                Text(
+                                    text = "%.4f\u00B0, %.4f\u00B0".format(entry.latitude, entry.longitude),
+                                    fontSize = 11.sp,
+                                    fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                                    color = SoundTagTextTertiary
+                                )
+                            }
+                            Text(
+                                text = "\u2192",
+                                fontSize = 14.sp,
+                                color = SoundTagGreen
+                            )
+                        }
                     }
                 }
             }

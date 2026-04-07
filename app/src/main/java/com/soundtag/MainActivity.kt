@@ -1,7 +1,9 @@
 package com.soundtag
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -161,7 +163,14 @@ class MainActivity : ComponentActivity() {
                                     totalDuration = totalDuration,
                                     isDriveConnected = isDriveConnected,
                                     onBack = { vm.closeDashboard() },
-                                    onSyncPending = { vm.syncPending() }
+                                    onSyncPending = { vm.syncPending() },
+                                    onOpenMap = { lat, lng, label ->
+                                        val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng($label)")
+                                        val intent = Intent(Intent.ACTION_VIEW, uri)
+                                        if (intent.resolveActivity(packageManager) != null) {
+                                            startActivity(intent)
+                                        }
+                                    }
                                 )
                             }
                             !hasPerms -> {
