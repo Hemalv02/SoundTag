@@ -111,7 +111,6 @@ fun AnnotateSheetContent(
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .navigationBarsPadding()
                 .imePadding()
                 .padding(horizontal = 24.dp),
             verticalArrangement = Arrangement.spacedBy(0.dp)
