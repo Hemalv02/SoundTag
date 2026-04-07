@@ -121,13 +121,13 @@ Every recording produces an `.m4a` audio file and a `.json` sidecar:
 - **Storage:** MediaStore API
 - **Upload:** Google Drive API v3 + Google Sign-In
 - **Background:** LifecycleService, WorkManager
-- **Min SDK:** 30 (Android 11)
+- **Min SDK:** 26 (Android 8.0)
 
 ## Setup
 
 ### Prerequisites
 - Android Studio Ladybug or newer
-- Android device/emulator running API 30+
+- Android device/emulator running API 26+
 
 ### Build
 ```bash

@@ -2,6 +2,8 @@ package com.soundtag.data
 
 import android.app.Application
 import android.content.Context
+import android.os.Build
+import android.os.Environment
 import android.provider.MediaStore
 import org.json.JSONArray
 import org.json.JSONObject
@@ -64,23 +66,32 @@ class RecordingRepository(application: Application) {
         loadAll().filter { it.uploadStatus == "pending" || it.uploadStatus == "failed" }
 
     fun getJsonForRecording(context: Context, filename: String): String? {
-        val uri = MediaStore.Files.getContentUri("external")
-        val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ?"
-        val cursor = context.contentResolver.query(
-            uri,
-            arrayOf(MediaStore.Files.FileColumns._ID),
-            selection,
-            arrayOf("$filename.json"),
-            null
-        )
-        cursor?.use {
-            if (it.moveToFirst()) {
-                val id = it.getLong(0)
-                val contentUri = android.content.ContentUris.withAppendedId(uri, id)
-                context.contentResolver.openInputStream(contentUri)?.use { stream ->
-                    return stream.bufferedReader().readText()
+        if (Build.VERSION.SDK_INT >= 29) {
+            val uri = MediaStore.Files.getContentUri("external")
+            val selection = "${MediaStore.Files.FileColumns.DISPLAY_NAME} = ?"
+            val cursor = context.contentResolver.query(
+                uri,
+                arrayOf(MediaStore.Files.FileColumns._ID),
+                selection,
+                arrayOf("$filename.json"),
+                null
+            )
+            cursor?.use {
+                if (it.moveToFirst()) {
+                    val id = it.getLong(0)
+                    val contentUri = android.content.ContentUris.withAppendedId(uri, id)
+                    context.contentResolver.openInputStream(contentUri)?.use { stream ->
+                        return stream.bufferedReader().readText()
+                    }
                 }
             }
+        } else {
+            @Suppress("DEPRECATION")
+            val file = java.io.File(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS),
+                "SoundTag/$filename.json"
+            )
+            if (file.exists()) return file.readText()
         }
         return null
     }

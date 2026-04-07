@@ -3,6 +3,7 @@ package com.soundtag
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -108,10 +109,12 @@ class MainActivity : ComponentActivity() {
                 ) { result -> vm.handleDriveSignIn(result.data) }
 
                 LaunchedEffect(Unit) {
-                    val perms = arrayOf(
+                    val perms = mutableListOf(
                         Manifest.permission.RECORD_AUDIO,
                         Manifest.permission.ACCESS_FINE_LOCATION
-                    )
+                    ).apply {
+                        if (Build.VERSION.SDK_INT <= 28) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    }.toTypedArray()
                     val allGranted = perms.all {
                         ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
                     }

@@ -7,6 +7,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
@@ -120,7 +121,7 @@ class RecordingService : LifecycleService() {
             // 5. Configure MediaRecorder
             val tempFile = File(cacheDir, "soundtag_temp.m4a")
             try {
-                val recorder = MediaRecorder(this@RecordingService).apply {
+                val recorder = (if (Build.VERSION.SDK_INT >= 31) MediaRecorder(this@RecordingService) else @Suppress("DEPRECATION") MediaRecorder()).apply {
                     setAudioSource(MediaRecorder.AudioSource.MIC)
                     setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
                     setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
