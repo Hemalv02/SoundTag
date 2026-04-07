@@ -183,6 +183,10 @@ class MainActivity : ComponentActivity() {
                                     isDriveConnected = isDriveConnected,
                                     onBack = { vm.closeDashboard() },
                                     onSyncPending = { vm.syncPending() },
+                                    onSettings = {
+                                        vm.closeDashboard()
+                                        vm.openSetup()
+                                    },
                                     onOpenMap = { lat, lng, label ->
                                         val uri = Uri.parse("geo:$lat,$lng?q=$lat,$lng($label)")
                                         val intent = Intent(Intent.ACTION_VIEW, uri)

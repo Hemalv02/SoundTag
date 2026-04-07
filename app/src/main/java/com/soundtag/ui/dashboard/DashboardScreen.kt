@@ -47,6 +47,7 @@ fun DashboardScreen(
     onBack: () -> Unit,
     onSyncPending: () -> Unit,
     onOpenMap: (Double, Double, String) -> Unit,
+    onSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -80,7 +81,20 @@ fun DashboardScreen(
                 letterSpacing = (-0.3).sp,
                 color = SoundTagTextPrimary
             )
-            Spacer(modifier = Modifier.size(22.dp))
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(SoundTagSurface)
+                    .clickable(onClick = onSettings),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "\u2699",
+                    fontSize = 16.sp,
+                    color = SoundTagTextSecondary
+                )
+            }
         }
 
         // Tabs
