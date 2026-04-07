@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
                 val totalCount by vm.totalCount.collectAsState()
                 val labelCounts by vm.labelCounts.collectAsState()
                 val totalDuration by vm.totalDuration.collectAsState()
+                val currentDb by vm.currentDb.collectAsState()
                 val playbackState by vm.audioPlayer.state.collectAsState()
 
                 val snackbarHostState = remember { SnackbarHostState() }
@@ -270,6 +271,7 @@ class MainActivity : ComponentActivity() {
                                     location = location,
                                     annotatorId = annotatorId,
                                     todayCount = todayCount,
+                                    currentDb = currentDb,
                                     onToggleRecording = {
                                         when (uiState) {
                                             is UiState.Recording -> vm.stopRecording(context)

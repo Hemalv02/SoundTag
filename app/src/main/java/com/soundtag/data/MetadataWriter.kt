@@ -18,7 +18,8 @@ object MetadataWriter {
         startTime: ZonedDateTime,
         location: LocationFix?,
         durationSeconds: Long,
-        annotatorId: String = "unknown"
+        annotatorId: String = "unknown",
+        dbStats: DbStats? = null
     ): String {
         val root = JSONObject()
 
@@ -69,6 +70,10 @@ object MetadataWriter {
             put("channels", 1)
             put("encoding", "AAC")
             put("location_accuracy_m", location?.accuracyMeters?.toDouble() ?: JSONObject.NULL)
+            put("avg_db", dbStats?.avgDb?.toDouble()?.let { "%.1f".format(it).toDouble() } ?: JSONObject.NULL)
+            put("max_db", dbStats?.maxDb?.toDouble()?.let { "%.1f".format(it).toDouble() } ?: JSONObject.NULL)
+            put("min_db", dbStats?.minDb?.toDouble()?.let { "%.1f".format(it).toDouble() } ?: JSONObject.NULL)
+            put("db_samples", dbStats?.samples ?: 0)
             put("notes", annotation.notes)
         }
         root.put("recording", recording)

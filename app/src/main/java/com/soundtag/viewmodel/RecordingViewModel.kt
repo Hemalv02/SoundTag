@@ -7,6 +7,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.soundtag.data.AnnotationData
 import com.soundtag.data.AudioPlayer
+import com.soundtag.data.DbStats
 import com.soundtag.data.DriveFolder
 import com.soundtag.data.DriveUploader
 import com.soundtag.data.FileSaver
@@ -36,12 +37,14 @@ sealed class UiState {
         val startTime: ZonedDateTime,
         val location: LocationFix?,
         val tempFile: File,
-        val durationSeconds: Long
+        val durationSeconds: Long,
+        val dbStats: DbStats? = null
     ) : UiState()
     data class Saving(
         val startTime: ZonedDateTime,
         val location: LocationFix?,
-        val durationSeconds: Long
+        val durationSeconds: Long,
+        val dbStats: DbStats? = null
     ) : UiState()
 }
 
@@ -59,6 +62,7 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
 
     val serviceState: StateFlow<RecordingState> = RecordingService.state
     val elapsedSeconds: StateFlow<Long> = RecordingService.elapsedSeconds
+    val currentDb: StateFlow<Float> = RecordingService.currentDb
 
     private val _uiState = MutableStateFlow<UiState>(UiState.Idle)
     val uiState: StateFlow<UiState> = _uiState.asStateFlow()
@@ -272,6 +276,7 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
     fun stopRecording(context: Context) {
         val currentState = RecordingService.state.value
         val duration = RecordingService.elapsedSeconds.value
+        val capturedDbStats = RecordingService.dbStats.value
 
         val intent = Intent(context, RecordingService::class.java).apply {
             action = RecordingService.ACTION_STOP
@@ -287,7 +292,8 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
                 startTime = currentState.startTime,
                 location = currentState.location,
                 tempFile = currentState.tempFile,
-                durationSeconds = duration
+                durationSeconds = duration,
+                dbStats = capturedDbStats
             )
         } else {
             _uiState.value = UiState.Idle
@@ -306,11 +312,13 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
             "misc_${state.startTime.format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmm"))}"
         }
 
+        val capturedStats = state.dbStats
         audioPlayer.stop()
         _uiState.value = UiState.Saving(
             startTime = state.startTime,
             location = state.location,
-            durationSeconds = state.durationSeconds
+            durationSeconds = state.durationSeconds,
+            dbStats = capturedStats
         )
 
         viewModelScope.launch {
@@ -320,7 +328,8 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
                 startTime = state.startTime,
                 location = state.location,
                 durationSeconds = state.durationSeconds,
-                annotatorId = aid
+                annotatorId = aid,
+                dbStats = capturedStats
             )
 
             // Upload to Drive first if connected (before temp file is deleted)
@@ -366,7 +375,8 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
                     durationSeconds = state.durationSeconds,
                     uploadStatus = uploadStatus,
                     latitude = state.location?.latitude,
-                    longitude = state.location?.longitude
+                    longitude = state.location?.longitude,
+                    avgDb = capturedStats?.avgDb
                 )
             )
             refreshDashboardData()

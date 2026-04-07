@@ -15,7 +15,8 @@ data class RecordingEntry(
     val durationSeconds: Long,
     val uploadStatus: String,
     val latitude: Double? = null,
-    val longitude: Double? = null
+    val longitude: Double? = null,
+    val avgDb: Float? = null
 )
 
 class RecordingRepository(application: Application) {
@@ -78,7 +79,8 @@ class RecordingRepository(application: Application) {
                 durationSeconds = obj.getLong("durationSeconds"),
                 uploadStatus = obj.optString("uploadStatus", "pending"),
                 latitude = if (obj.has("latitude") && !obj.isNull("latitude")) obj.getDouble("latitude") else null,
-                longitude = if (obj.has("longitude") && !obj.isNull("longitude")) obj.getDouble("longitude") else null
+                longitude = if (obj.has("longitude") && !obj.isNull("longitude")) obj.getDouble("longitude") else null,
+                avgDb = if (obj.has("avgDb") && !obj.isNull("avgDb")) obj.getDouble("avgDb").toFloat() else null
             )
         }
     }
@@ -94,6 +96,7 @@ class RecordingRepository(application: Application) {
                 put("uploadStatus", entry.uploadStatus)
                 put("latitude", entry.latitude ?: JSONObject.NULL)
                 put("longitude", entry.longitude ?: JSONObject.NULL)
+                put("avgDb", entry.avgDb?.toDouble() ?: JSONObject.NULL)
             })
         }
         prefs.edit().putString(key, arr.toString()).apply()

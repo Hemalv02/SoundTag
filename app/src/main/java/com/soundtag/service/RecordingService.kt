@@ -14,8 +14,10 @@ import androidx.lifecycle.lifecycleScope
 import com.soundtag.MainActivity
 import com.soundtag.R
 import com.soundtag.SoundTagApp
+import com.soundtag.data.DbStats
 import com.soundtag.data.LocationFix
 import com.soundtag.data.LocationHelper
+import kotlin.math.log10
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +46,12 @@ class RecordingService : LifecycleService() {
         private val _elapsedSeconds = MutableStateFlow(0L)
         val elapsedSeconds: StateFlow<Long> = _elapsedSeconds.asStateFlow()
 
+        private val _currentDb = MutableStateFlow(0f)
+        val currentDb: StateFlow<Float> = _currentDb.asStateFlow()
+
+        private val _dbStats = MutableStateFlow<DbStats?>(null)
+        val dbStats: StateFlow<DbStats?> = _dbStats.asStateFlow()
+
         const val ACTION_START = "com.soundtag.ACTION_START"
         const val ACTION_STOP = "com.soundtag.ACTION_STOP"
 
@@ -52,6 +60,7 @@ class RecordingService : LifecycleService() {
         private const val MIN_DURATION_SECONDS = 5L
     }
 
+    private val dbSamples = mutableListOf<Float>()
     private var mediaRecorder: MediaRecorder? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
@@ -130,6 +139,9 @@ class RecordingService : LifecycleService() {
                 val startTime = ZonedDateTime.now()
                 _state.value = RecordingState.Recording(startTime, locationFix, tempFile)
                 _elapsedSeconds.value = 0L
+                _currentDb.value = 0f
+                _dbStats.value = null
+                dbSamples.clear()
 
                 // 6. Start ticker
                 startTicker()
@@ -160,11 +172,22 @@ class RecordingService : LifecycleService() {
         tickerJob?.cancel()
         tickerJob = null
 
+        // Compute dB stats before reset
+        if (dbSamples.isNotEmpty()) {
+            _dbStats.value = DbStats(
+                avgDb = dbSamples.average().toFloat(),
+                maxDb = dbSamples.max(),
+                minDb = dbSamples.min(),
+                samples = dbSamples.size
+            )
+        }
+
         releaseWakeLock()
         abandonAudioFocus()
 
         _state.value = RecordingState.Idle
         _elapsedSeconds.value = 0L
+        _currentDb.value = 0f
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -177,11 +200,18 @@ class RecordingService : LifecycleService() {
                 val seconds = _elapsedSeconds.value + 1
                 _elapsedSeconds.value = seconds
 
+                // Sample amplitude → dB
+                val amp = mediaRecorder?.maxAmplitude ?: 0
+                val db = if (amp > 0) (20 * log10(amp.toDouble())).toFloat() else 0f
+                _currentDb.value = db
+                if (db > 0f) dbSamples.add(db)
+
                 // Update notification
                 val mm = seconds / 60
                 val ss = seconds % 60
+                val dbText = if (db > 0) " \u00B7 ${db.toInt()} dB" else ""
                 val timeText = "%02d:%02d".format(mm, ss)
-                val notification = buildNotification("Recording... $timeText")
+                val notification = buildNotification("Recording... $timeText$dbText")
                 val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
                 nm.notify(NOTIFICATION_ID, notification)
 

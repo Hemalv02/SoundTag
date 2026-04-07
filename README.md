@@ -26,12 +26,14 @@ SoundTag is an Android app for collecting and annotating urban noise audio data.
 - Wake lock prevents phone sleep during recording
 - Min 5s / max 5min duration guards
 - AAC audio at 44100Hz mono (.m4a)
+- Live decibel meter with color indicator (green/yellow/red)
 
 ### Metadata Capture (Automatic)
 - GPS coordinates + accuracy at recording start
 - Timestamp (local timezone)
 - Duration, device model, OS version, app version
 - Annotator ID (set once in settings)
+- Decibel levels: avg, max, min dB from amplitude sampling
 
 ### Annotation (Post-Recording)
 - Noise type: Traffic, Horn, Construction, Industrial, Crowd, Nature, Silence, Mixed
@@ -92,7 +94,11 @@ Every recording produces an `.m4a` audio file and a `.json` sidecar:
     "duration_seconds": 134,
     "sample_rate_hz": 44100,
     "channels": 1,
-    "encoding": "AAC"
+    "encoding": "AAC",
+    "avg_db": 68.3,
+    "max_db": 84.1,
+    "min_db": 42.7,
+    "db_samples": 134
   },
   "device": {
     "model": "Xiaomi Redmi Note 12",

@@ -40,6 +40,7 @@ fun RecordScreen(
     location: LocationFix?,
     annotatorId: String,
     todayCount: Int,
+    currentDb: Float,
     onToggleRecording: () -> Unit,
     onDashboardTap: () -> Unit,
     modifier: Modifier = Modifier
@@ -111,16 +112,29 @@ fun RecordScreen(
                             modifier = Modifier.size(32.dp)
                         )
                         if (isRecording) {
-                            Spacer(modifier = Modifier.height(8.dp))
+                            Spacer(modifier = Modifier.height(4.dp))
                             val mm = elapsedSeconds / 60
                             val ss = elapsedSeconds % 60
                             Text(
                                 text = "%02d:%02d".format(mm, ss),
-                                fontSize = 24.sp,
+                                fontSize = 22.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace,
                                 color = SoundTagTextPrimary
                             )
+                            if (currentDb > 0) {
+                                val dbColor = when {
+                                    currentDb >= 80 -> SoundTagError
+                                    currentDb >= 60 -> SoundTagWarning
+                                    else -> SoundTagGreen
+                                }
+                                Text(
+                                    text = "${currentDb.toInt()} dB",
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = dbColor
+                                )
+                            }
                         }
                     }
                 }
