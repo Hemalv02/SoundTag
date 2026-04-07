@@ -133,7 +133,34 @@ async function onUploadNow() {
 }
 
 $("saveLocalBtn").addEventListener("click", onSaveLocal);
+async function onUploadExisting() {
+  const audio = $("uploadAudio").files[0];
+  if (!audio) return toast("Pick an audio file", "error");
+
+  let metadata;
+  const metaFile = $("uploadMeta").files[0];
+  if (metaFile) {
+    try {
+      metadata = JSON.parse(await metaFile.text());
+    } catch {
+      return toast("Invalid JSON sidecar", "error");
+    }
+  } else {
+    metadata = {
+      filename: audio.name,
+      annotator_id: annotatorInput.value.trim() || "anonymous",
+    };
+  }
+
+  const statusEl = $("uploadStatus");
+  statusEl.textContent = "Uploading\u2026";
+  const res = await uploadRecording(audio, metadata);
+  statusEl.textContent = res.ok ? "Done." : `Failed: ${res.error}`;
+  toast(res.ok ? "Uploaded" : "Upload failed", res.ok ? "success" : "error");
+}
+
 $("uploadNowBtn").addEventListener("click", onUploadNow);
+$("uploadExistingBtn").addEventListener("click", onUploadExisting);
 
 renderAllChips();
 refreshGps();
