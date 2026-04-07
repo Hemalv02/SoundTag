@@ -2,6 +2,7 @@ import { getLocation, formatGps } from "./location.js";
 import { Recorder, formatTimer, MAX_DURATION_MS } from "./recorder.js";
 import { buildMetadata, saveLocally } from "./metadata.js";
 import { uploadRecording } from "./upload.js";
+import { DbMeter } from "./db_meter.js";
 import {
   LABELS, SEVERITY, ENVIRONMENTS, CONTEXTS,
   defaultSelections, renderChipGroup, autoFilename,
@@ -25,6 +26,9 @@ const recorder = new Recorder();
 let timerInterval = null;
 let currentLocation = null;
 let lastRecording = null; // { blob, mimeType, startedAt, durationMs }
+let dbMeter = null;
+let peakDb = 0;
+const dbEl = $("dbMeter");
 const selections = defaultSelections();
 
 function toast(msg, kind = "") {
@@ -61,18 +65,25 @@ async function refreshGps() {
 function tick() {
   const ms = recorder.elapsedMs();
   timerEl.textContent = formatTimer(ms);
+  if (dbMeter) {
+    const db = dbMeter.sample();
+    if (db > peakDb) peakDb = db;
+    dbEl.textContent = `${db.toFixed(1)} dB (peak ${peakDb.toFixed(1)})`;
+  }
   if (ms >= MAX_DURATION_MS) stopRecording();
 }
 
 async function startRecording() {
   try {
-    await recorder.start();
+    const stream = await recorder.start();
     stateEl.textContent = "Recording";
     recordBtn.disabled = true;
     stopBtn.disabled = false;
     preview.hidden = true;
     annotateCard.hidden = true;
-    timerInterval = setInterval(tick, 200);
+    peakDb = 0;
+    dbMeter = new DbMeter(stream);
+    timerInterval = setInterval(tick, 100);
     refreshGps();
   } catch (e) {
     toast("Microphone permission denied", "error");
@@ -88,7 +99,8 @@ async function stopRecording() {
     stopBtn.disabled = true;
     preview.src = URL.createObjectURL(result.blob);
     preview.hidden = false;
-    lastRecording = result;
+    if (dbMeter) { dbMeter.dispose(); dbMeter = null; }
+    lastRecording = { ...result, peakDb };
     annotateCard.hidden = false;
     if (!filenameInput.value) filenameInput.value = autoFilename(selections.label);
   } catch (e) {
@@ -98,7 +110,7 @@ async function stopRecording() {
 
 function currentMetadata() {
   const base = (filenameInput.value || autoFilename(selections.label)).trim();
-  return buildMetadata({
+  const meta = buildMetadata({
     filenameBase: base,
     mimeType: lastRecording.mimeType,
     startedAt: lastRecording.startedAt,
@@ -114,6 +126,8 @@ function currentMetadata() {
       notes: notesInput.value.trim(),
     },
   });
+  meta.peak_db = Number(lastRecording.peakDb.toFixed(1));
+  return meta;
 }
 
 function onSaveLocal() {
@@ -161,6 +175,12 @@ async function onUploadExisting() {
 
 $("uploadNowBtn").addEventListener("click", onUploadNow);
 $("uploadExistingBtn").addEventListener("click", onUploadExisting);
+
+// Persist annotator ID across sessions.
+annotatorInput.value = localStorage.getItem("annotator_id") || "";
+annotatorInput.addEventListener("change", () => {
+  localStorage.setItem("annotator_id", annotatorInput.value.trim());
+});
 
 renderAllChips();
 refreshGps();

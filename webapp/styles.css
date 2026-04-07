@@ -24,6 +24,7 @@ html,body{margin:0;background:var(--bg);color:var(--text);
 .timer{font-size:48px;font-weight:700;font-variant-numeric:tabular-nums;
   color:var(--brand)}
 .state{color:var(--muted);font-size:13px;margin-top:6px}
+.db{color:var(--brand);font-size:14px;margin-top:4px;font-variant-numeric:tabular-nums}
 .controls{display:flex;gap:10px;margin-top:12px;flex-wrap:wrap}
 .btn{flex:1;min-width:120px;padding:12px 16px;border-radius:12px;
   border:1px solid var(--border);background:transparent;color:var(--text);

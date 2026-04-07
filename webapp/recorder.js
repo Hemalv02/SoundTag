@@ -45,6 +45,7 @@ export class Recorder {
     };
     this.mediaRecorder.start();
     this.startedAt = Date.now();
+    return this.stream;
   }
 
   stop() {
