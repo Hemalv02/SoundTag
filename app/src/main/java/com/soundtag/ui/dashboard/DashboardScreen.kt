@@ -46,6 +46,8 @@ fun DashboardScreen(
     isDriveConnected: Boolean,
     onBack: () -> Unit,
     onSyncPending: () -> Unit,
+    onRetryUpload: (String) -> Unit,
+    onDeleteRecording: (String) -> Unit,
     onOpenMap: (Double, Double, String) -> Unit,
     onSettings: () -> Unit,
     modifier: Modifier = Modifier
@@ -115,7 +117,9 @@ fun DashboardScreen(
                 todayCount = todayCount,
                 totalCount = totalCount,
                 isDriveConnected = isDriveConnected,
-                onSyncPending = onSyncPending
+                onSyncPending = onSyncPending,
+                onRetryUpload = onRetryUpload,
+                onDeleteRecording = onDeleteRecording
             )
             1 -> DatasetStatsTab(
                 labelCounts = labelCounts,
@@ -162,7 +166,9 @@ private fun RecordingsTab(
     todayCount: Int,
     totalCount: Int,
     isDriveConnected: Boolean,
-    onSyncPending: () -> Unit
+    onSyncPending: () -> Unit,
+    onRetryUpload: (String) -> Unit,
+    onDeleteRecording: (String) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier
@@ -234,7 +240,11 @@ private fun RecordingsTab(
 
         // Recording rows
         items(recordings) { entry ->
-            RecordingRow(entry = entry)
+            RecordingRow(
+                entry = entry,
+                onRetry = { onRetryUpload(entry.filename) },
+                onDelete = { onDeleteRecording(entry.filename) }
+            )
         }
 
         if (recordings.isEmpty()) {

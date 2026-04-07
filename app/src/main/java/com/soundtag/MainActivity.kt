@@ -220,6 +220,8 @@ class MainActivity : ComponentActivity() {
                                     isDriveConnected = isDriveConnected,
                                     onBack = { vm.closeDashboard() },
                                     onSyncPending = { vm.syncPending() },
+                                    onRetryUpload = { filename -> vm.retryUpload(filename) },
+                                    onDeleteRecording = { filename -> vm.deleteRecording(filename) },
                                     onSettings = {
                                         vm.closeDashboard()
                                         vm.openSetup()

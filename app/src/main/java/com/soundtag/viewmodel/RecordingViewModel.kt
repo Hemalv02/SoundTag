@@ -209,6 +209,18 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
         UploadWorker.enqueue(getApplication())
     }
 
+    fun retryUpload(filename: String) {
+        repo.updateUploadStatus(filename, "pending")
+        refreshDashboardData()
+        UploadWorker.enqueue(getApplication())
+    }
+
+    fun deleteRecording(filename: String) {
+        repo.deleteRecording(filename)
+        uploadQueue.removePending(filename)
+        refreshDashboardData()
+    }
+
     // Drive
     fun getSignInIntent(): Intent = DriveUploader.getSignInIntent(getApplication())
 

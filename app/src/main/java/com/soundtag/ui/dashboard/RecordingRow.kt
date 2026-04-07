@@ -1,16 +1,23 @@
 package com.soundtag.ui.dashboard
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -36,7 +43,14 @@ private val noiseEmoji = mapOf(
 )
 
 @Composable
-fun RecordingRow(entry: RecordingEntry, modifier: Modifier = Modifier) {
+fun RecordingRow(
+    entry: RecordingEntry,
+    onRetry: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+
     val time = Instant.ofEpochMilli(entry.timestamp)
         .atZone(ZoneId.systemDefault())
     val timeStr = time.format(DateTimeFormatter.ofPattern("h:mm a"))
@@ -44,38 +58,89 @@ fun RecordingRow(entry: RecordingEntry, modifier: Modifier = Modifier) {
     val ss = entry.durationSeconds % 60
     val durationStr = "${mm}m ${ss.toString().padStart(2, '0')}s"
     val emoji = noiseEmoji[entry.noiseType] ?: "\uD83C\uDFA4"
+    val canRetry = entry.uploadStatus == "pending" || entry.uploadStatus == "failed"
 
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .height(64.dp)
             .clip(RoundedCornerShape(14.dp))
             .background(SoundTagSurface)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Text(text = emoji, fontSize = 18.sp)
-
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
+        // Main row
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(64.dp)
+                .clickable { expanded = !expanded }
+                .padding(horizontal = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(
-                text = entry.filename,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                fontFamily = FontFamily.Monospace,
-                color = SoundTagTextPrimary
-            )
-            Text(
-                text = "$timeStr \u00B7 $durationStr",
-                fontSize = 12.sp,
-                color = SoundTagTextTertiary
-            )
+            Text(text = emoji, fontSize = 18.sp)
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
+            ) {
+                Text(
+                    text = entry.filename,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    fontFamily = FontFamily.Monospace,
+                    color = SoundTagTextPrimary
+                )
+                Text(
+                    text = "$timeStr \u00B7 $durationStr",
+                    fontSize = 12.sp,
+                    color = SoundTagTextTertiary
+                )
+            }
+
+            StatusBadge(status = entry.uploadStatus)
         }
 
-        StatusBadge(status = entry.uploadStatus)
+        // Expanded actions
+        if (expanded) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (canRetry && onRetry != null) {
+                    Text(
+                        text = "Retry Upload",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SoundTagGreen,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                onRetry()
+                                expanded = false
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                if (onDelete != null) {
+                    Text(
+                        text = "Delete",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = SoundTagError,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                onDelete()
+                                expanded = false
+                            }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                }
+            }
+        }
     }
 }
 

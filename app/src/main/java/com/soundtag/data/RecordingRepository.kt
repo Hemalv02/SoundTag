@@ -61,6 +61,11 @@ class RecordingRepository(application: Application) {
     fun getPending(): List<RecordingEntry> =
         loadAll().filter { it.uploadStatus == "pending" || it.uploadStatus == "failed" }
 
+    fun deleteRecording(filename: String) {
+        val list = loadAll().filter { it.filename != filename }
+        save(list)
+    }
+
     private fun loadAll(): List<RecordingEntry> {
         val json = prefs.getString(key, "[]") ?: "[]"
         val arr = JSONArray(json)
