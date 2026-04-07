@@ -1,74 +1,132 @@
+// SoundTag Web — multi-view controller mirroring the Android Compose screens.
+
 import { getLocation, formatGps } from "./location.js";
 import { Recorder, formatTimer, MAX_DURATION_MS } from "./recorder.js";
+import { DbMeter } from "./db_meter.js";
 import { buildMetadata, saveLocally } from "./metadata.js";
 import { uploadRecording } from "./upload.js";
-import { DbMeter } from "./db_meter.js";
 import {
-  LABELS, SEVERITY, ENVIRONMENTS, CONTEXTS,
-  defaultSelections, renderChipGroup, autoFilename,
+  LABELS, SEVERITY_LEVELS, SEVERITY_SCORES, ENVIRONMENTS, CONTEXTS,
+  defaultSelections, renderChipGroup, renderToggleGroup,
+  renderSeverityRow, renderScoreBoxes, autoFilename,
 } from "./annotate.js";
+import {
+  loadRecordings, saveRecordings, addRecording,
+  loadProfile, saveProfile, todayCount,
+} from "./store.js";
+import { GOOGLE_CLIENT_ID } from "./config.js";
 
 const $ = id => document.getElementById(id);
-const gpsEl = $("gpsBadge");
-const timerEl = $("timer");
-const stateEl = $("stateText");
-const recordBtn = $("recordBtn");
-const stopBtn = $("stopBtn");
-const preview = $("preview");
-const snackbar = $("snackbar");
-const annotateCard = $("annotateCard");
-const filenameInput = $("filename");
-const annotatorInput = $("annotator");
-const notesInput = $("notes");
-const isNoiseInput = $("isNoise");
 
+// ---------- View routing ----------
+const VIEWS = ["setup", "record", "annotate", "dashboard"];
+function show(view) {
+  for (const v of VIEWS) $(`view-${v}`).hidden = v !== view;
+  if (view === "dashboard") renderDashboard();
+  if (view === "record") {
+    $("statusId").textContent = profile.annotatorId || "—";
+    $("todayCount").textContent = `Today: ${todayCount(loadRecordings())} recordings`;
+  }
+  window.scrollTo(0, 0);
+}
+
+// ---------- State ----------
 const recorder = new Recorder();
 let timerInterval = null;
 let currentLocation = null;
-let lastRecording = null; // { blob, mimeType, startedAt, durationMs }
+let lastRecording = null;
 let dbMeter = null;
 let peakDb = 0;
-const dbEl = $("dbMeter");
+let profile = loadProfile();
 const selections = defaultSelections();
 
+// ---------- Snackbar ----------
 function toast(msg, kind = "") {
-  snackbar.textContent = msg;
-  snackbar.className = "snackbar " + kind;
-  snackbar.hidden = false;
+  const s = $("snackbar");
+  s.textContent = msg;
+  s.className = "snackbar " + kind;
+  s.hidden = false;
   clearTimeout(toast._t);
-  toast._t = setTimeout(() => (snackbar.hidden = true), 2500);
+  toast._t = setTimeout(() => (s.hidden = true), 2500);
 }
 
-function renderAllChips() {
-  renderChipGroup($("labelChips"), LABELS, selections.label, v => {
-    selections.label = v;
-    filenameInput.value = autoFilename(v);
-    renderAllChips();
+// ============================== SETUP ==============================
+function initSetup() {
+  $("setupName").value = profile.name || "";
+  $("setupId").value = profile.annotatorId || "";
+  $("driveStatusText").textContent = GOOGLE_CLIENT_ID
+    ? "Google Drive" : "Google Drive (not configured)";
+  $("driveStatusBadge").textContent = GOOGLE_CLIENT_ID ? "Ready" : "Offline";
+  $("driveStatusBadge").className = "pill " + (GOOGLE_CLIENT_ID ? "pill-accent" : "pill-muted");
+  const updateFolder = () => {
+    const id = ($("setupId").value || "{id}").trim() || "{id}";
+    $("folderText").textContent = `SoundTag/${id}/`;
+  };
+  $("setupId").addEventListener("input", updateFolder);
+  updateFolder();
+
+  $("continueBtn").addEventListener("click", () => {
+    const name = $("setupName").value.trim();
+    const annotatorId = $("setupId").value.trim().toLowerCase().replace(/\s+/g, "-");
+    if (!annotatorId) return toast("Annotator ID is required", "error");
+    profile = { name, annotatorId };
+    saveProfile(profile);
+    show("record");
+    refreshGps();
   });
-  renderChipGroup($("severityChips"), SEVERITY, selections.severity, v => {
-    selections.severity = v; renderAllChips();
+}
+
+// ============================== RECORD ==============================
+function initRecord() {
+  $("recordBtn").addEventListener("click", () => {
+    if (recorder.state === "recording") stopRecording();
+    else startRecording();
   });
-  renderChipGroup($("envChips"), ENVIRONMENTS, selections.environment, v => {
-    selections.environment = v; renderAllChips();
-  });
-  renderChipGroup($("ctxChips"), CONTEXTS, selections.locationContext, v => {
-    selections.locationContext = v; renderAllChips();
-  });
+  $("openDashboardBtn").addEventListener("click", () => show("dashboard"));
+
+  // Build waveform bars once
+  const wf = $("waveform");
+  wf.replaceChildren();
+  for (let i = 0; i < 14; i++) {
+    const b = document.createElement("div");
+    b.className = "wave-bar";
+    wf.appendChild(b);
+  }
 }
 
 async function refreshGps() {
-  gpsEl.textContent = "GPS: fetching\u2026";
+  $("gpsCoords").textContent = "locating…";
+  $("gpsAcc").hidden = true;
   currentLocation = await getLocation();
-  gpsEl.textContent = formatGps(currentLocation);
+  if (currentLocation) {
+    $("gpsCoords").textContent =
+      `${currentLocation.lat.toFixed(4)}, ${currentLocation.lon.toFixed(4)}`;
+    $("gpsAcc").textContent = `±${Math.round(currentLocation.acc)}m`;
+    $("gpsAcc").hidden = false;
+  } else {
+    $("gpsCoords").textContent = "GPS unavailable";
+  }
+}
+
+function updateWaveform(db) {
+  const bars = document.querySelectorAll(".wave-bar");
+  const norm = Math.min(1, db / 40);
+  bars.forEach((b, i) => {
+    const variance = 0.4 + 0.6 * Math.abs(Math.sin((Date.now() / 120) + i));
+    const h = 8 + norm * 24 * variance;
+    b.style.height = `${h}px`;
+    b.style.opacity = String(0.3 + norm * 0.7 * variance);
+  });
 }
 
 function tick() {
   const ms = recorder.elapsedMs();
-  timerEl.textContent = formatTimer(ms);
+  $("timer").textContent = formatTimer(ms);
   if (dbMeter) {
     const db = dbMeter.sample();
     if (db > peakDb) peakDb = db;
-    dbEl.textContent = `${db.toFixed(1)} dB (peak ${peakDb.toFixed(1)})`;
+    $("dbReading").textContent = `${db.toFixed(1)} dB`;
+    updateWaveform(db);
   }
   if (ms >= MAX_DURATION_MS) stopRecording();
 }
@@ -76,11 +134,13 @@ function tick() {
 async function startRecording() {
   try {
     const stream = await recorder.start();
-    stateEl.textContent = "Recording";
-    recordBtn.disabled = true;
-    stopBtn.disabled = false;
-    preview.hidden = true;
-    annotateCard.hidden = true;
+    $("view-record").classList.add("recording");
+    $("stateStrip").classList.add("rec");
+    $("statusDot").classList.add("rec");
+    $("micIdleContent").hidden = true;
+    $("micActiveContent").hidden = false;
+    $("recordSub").hidden = true;
+    $("activeBlock").hidden = false;
     peakDb = 0;
     dbMeter = new DbMeter(stream);
     timerInterval = setInterval(tick, 100);
@@ -94,22 +154,87 @@ async function stopRecording() {
   try {
     const result = await recorder.stop();
     clearInterval(timerInterval);
-    stateEl.textContent = "Stopped";
-    recordBtn.disabled = false;
-    stopBtn.disabled = true;
-    preview.src = URL.createObjectURL(result.blob);
-    preview.hidden = false;
+    $("view-record").classList.remove("recording");
+    $("stateStrip").classList.remove("rec");
+    $("statusDot").classList.remove("rec");
+    $("micIdleContent").hidden = false;
+    $("micActiveContent").hidden = true;
+    $("recordSub").hidden = false;
+    $("activeBlock").hidden = true;
     if (dbMeter) { dbMeter.dispose(); dbMeter = null; }
     lastRecording = { ...result, peakDb };
-    annotateCard.hidden = false;
-    if (!filenameInput.value) filenameInput.value = autoFilename(selections.label);
+    openAnnotate();
   } catch (e) {
     if (e.message === "min-duration") toast("Minimum 5 seconds", "error");
   }
 }
 
+// ============================== ANNOTATE ==============================
+function initAnnotate() {
+  $("annotateBackBtn").addEventListener("click", () => show("record"));
+  $("saveLocalBtn").addEventListener("click", () => handleSave(true));
+  $("saveLocalOnlyBtn").addEventListener("click", () => handleSave(false));
+
+  $("pbPlay").addEventListener("click", () => {
+    const a = $("playbackAudio");
+    if (a.paused) a.play(); else a.pause();
+  });
+  const audio = $("playbackAudio");
+  audio.addEventListener("timeupdate", () => {
+    if (!audio.duration) return;
+    const pct = (audio.currentTime / audio.duration) * 100;
+    $("pbFill").style.width = pct + "%";
+    $("pbTime").textContent =
+      `${formatTimer(audio.currentTime * 1000)} / ${formatTimer(audio.duration * 1000)}`;
+  });
+}
+
+function renderAnnotateChips() {
+  renderChipGroup($("labelChips"), LABELS, selections.label, v => {
+    selections.label = v;
+    $("filename").value = autoFilename(v);
+    renderAnnotateChips();
+  });
+  renderToggleGroup($("noiseToggle"), ["noise", "not noise"],
+    selections.isNoise ? "noise" : "not noise",
+    v => { selections.isNoise = v === "noise"; renderAnnotateChips(); });
+  renderSeverityRow($("severityRow"), selections.severity, v => {
+    selections.severity = v;
+    selections.score = SEVERITY_SCORES[v];
+    $("scoreValue").textContent = selections.score;
+    renderAnnotateChips();
+  });
+  renderScoreBoxes($("scoreBoxes"), selections.score, v => {
+    selections.score = v; renderAnnotateChips();
+  });
+  $("scoreValue").textContent = selections.score;
+  renderToggleGroup($("envToggle"), ENVIRONMENTS, selections.environment,
+    v => { selections.environment = v; renderAnnotateChips(); });
+  renderChipGroup($("ctxChips"), CONTEXTS, selections.locationContext,
+    v => { selections.locationContext = v; renderAnnotateChips(); });
+}
+
+function openAnnotate() {
+  if (!lastRecording) return;
+  const dur = Math.round(lastRecording.durationMs / 1000);
+  const ts = new Date(lastRecording.startedAt).toLocaleTimeString();
+  $("recInfo").textContent = `${dur}s · ${ts}`;
+  $("recGps").textContent = currentLocation
+    ? `${currentLocation.lat.toFixed(4)}, ${currentLocation.lon.toFixed(4)} ±${Math.round(currentLocation.acc)}m`
+    : "No GPS";
+
+  $("playbackAudio").src = URL.createObjectURL(lastRecording.blob);
+  $("filename").value = autoFilename(selections.label);
+  $("notes").value = "";
+  $("saveFootnote").textContent = GOOGLE_CLIENT_ID
+    ? `Saves to Drive under SoundTag/${profile.annotatorId}/`
+    : "Drive not configured — save locally";
+  renderAnnotateChips();
+  show("annotate");
+}
+
 function currentMetadata() {
-  const base = (filenameInput.value || autoFilename(selections.label)).trim();
+  const base = ($("filename").value || autoFilename(selections.label)).trim();
   const meta = buildMetadata({
     filenameBase: base,
     mimeType: lastRecording.mimeType,
@@ -121,66 +246,173 @@ function currentMetadata() {
       severity: selections.severity,
       environment: selections.environment,
       locationContext: selections.locationContext,
-      isNoise: isNoiseInput.checked,
-      annotatorId: annotatorInput.value.trim(),
-      notes: notesInput.value.trim(),
+      isNoise: selections.isNoise,
+      annotatorId: profile.annotatorId,
+      notes: $("notes").value.trim(),
     },
   });
+  meta.severity_score = selections.score;
   meta.peak_db = Number(lastRecording.peakDb.toFixed(1));
   return meta;
 }
 
-function onSaveLocal() {
+async function handleSave(withUpload) {
   if (!lastRecording) return toast("No recording", "error");
-  saveLocally(lastRecording.blob, currentMetadata());
-  toast("Saved locally", "success");
+  const meta = currentMetadata();
+  saveLocally(lastRecording.blob, meta);
+  let status = "Local";
+  if (withUpload && GOOGLE_CLIENT_ID) {
+    toast("Uploading…");
+    const res = await uploadRecording(lastRecording.blob, meta);
+    status = res.ok ? "Uploaded" : "Failed";
+    toast(res.ok ? "Uploaded" : "Upload failed: " + res.error, res.ok ? "success" : "error");
+  } else {
+    toast("Saved locally", "success");
+  }
+  addRecording(meta, status);
+  show("record");
 }
 
-recordBtn.addEventListener("click", startRecording);
-stopBtn.addEventListener("click", stopRecording);
-async function onUploadNow() {
-  if (!lastRecording) return toast("No recording", "error");
-  toast("Uploading\u2026");
-  const res = await uploadRecording(lastRecording.blob, currentMetadata());
-  if (res.ok) toast("Uploaded", "success");
-  else toast("Upload failed: " + res.error, "error");
+// ============================== DASHBOARD ==============================
+function initDashboard() {
+  $("dashBackBtn").addEventListener("click", () => show("record"));
+  document.querySelectorAll(".tab").forEach(t => {
+    t.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
+      t.classList.add("active");
+      $("tabRecordings").hidden = t.dataset.tab !== "recordings";
+      $("tabStats").hidden = t.dataset.tab !== "stats";
+    });
+  });
+  $("syncAllBtn").addEventListener("click", syncAllPending);
+  $("uploadExistingBtn").addEventListener("click", onUploadExisting);
 }
 
-$("saveLocalBtn").addEventListener("click", onSaveLocal);
+function renderDashboard() {
+  const list = loadRecordings();
+  $("sumToday").textContent = `Today: ${todayCount(list)}`;
+  $("sumTotal").textContent = `Total: ${list.length}`;
+  $("driveSummary").textContent = GOOGLE_CLIENT_ID
+    ? "Connected to Drive" : "Drive not configured";
+
+  const listEl = $("recordingList");
+  listEl.replaceChildren();
+  if (list.length === 0) {
+    const e = document.createElement("div");
+    e.className = "empty";
+    e.textContent = "No recordings yet";
+    listEl.appendChild(e);
+  } else {
+    for (const r of list.slice(0, 50)) listEl.appendChild(recordingRow(r));
+  }
+
+  // Stats
+  const totalSec = list.reduce((s, r) => s + (r.duration_seconds || 0), 0);
+  const mins = Math.floor(totalSec / 60), hrs = Math.floor(mins / 60);
+  $("statsOverview").textContent =
+    `${list.length} recordings · ${hrs}h ${mins % 60}m total`;
+  renderBarChart(list);
+}
+
+function recordingRow(r) {
+  const row = document.createElement("div");
+  row.className = "rec-row";
+  const emoji = document.createElement("div");
+  emoji.className = "rec-emoji";
+  emoji.textContent = LABELS.find(l => l.id === r.label)?.emoji || "🎙️";
+  row.appendChild(emoji);
+
+  const col = document.createElement("div");
+  col.className = "rec-col";
+  const n = document.createElement("div");
+  n.className = "rec-name mono";
+  n.textContent = r.filename;
+  const m = document.createElement("div");
+  m.className = "rec-meta";
+  const time = (r.started_at_local || "").slice(11, 16);
+  m.textContent = `${time} · ${r.duration_seconds || 0}s`;
+  col.append(n, m);
+  row.appendChild(col);
+
+  const badge = document.createElement("span");
+  const statusClass = {
+    Uploaded: "pill-success", Local: "pill-muted",
+    Pending: "pill-warn", Failed: "pill-error",
+  }[r.status] || "pill-muted";
+  badge.className = "pill " + statusClass;
+  badge.textContent = r.status;
+  row.appendChild(badge);
+  return row;
+}
+
+function renderBarChart(list) {
+  const counts = {};
+  LABELS.forEach(l => (counts[l.id] = 0));
+  list.forEach(r => { if (counts[r.label] != null) counts[r.label]++; });
+  const max = Math.max(1, ...Object.values(counts));
+  const chart = $("barChart");
+  chart.replaceChildren();
+  for (const lbl of LABELS) {
+    const row = document.createElement("div");
+    row.className = "bar-row";
+    const l = document.createElement("div");
+    l.className = "bar-lbl";
+    l.textContent = `${lbl.emoji} ${lbl.text}`;
+    const track = document.createElement("div");
+    track.className = "bar-track";
+    const fill = document.createElement("div");
+    fill.className = "bar-fill";
+    fill.style.width = `${(counts[lbl.id] / max) * 100}%`;
+    track.appendChild(fill);
+    const c = document.createElement("div");
+    c.className = "bar-count";
+    c.textContent = String(counts[lbl.id]);
+    row.append(l, track, c);
+    chart.appendChild(row);
+  }
+  const lowLabels = LABELS.filter(l => counts[l.id] < 5).map(l => l.text);
+  if (lowLabels.length > 0 && list.length > 0) {
+    $("balanceWarningCard").hidden = false;
+    $("balanceWarning").textContent =
+      `⚠ Collect more: ${lowLabels.join(", ")}. Each label needs at least 5 clips.`;
+  } else {
+    $("balanceWarningCard").hidden = true;
+  }
+}
+
+async function syncAllPending() {
+  const list = loadRecordings();
+  const pending = list.filter(r => r.status === "Pending" || r.status === "Failed");
+  if (pending.length === 0) return toast("Nothing to sync");
+  toast(`${pending.length} pending — blobs not persisted across reloads`, "error");
+}
+
 async function onUploadExisting() {
   const audio = $("uploadAudio").files[0];
   if (!audio) return toast("Pick an audio file", "error");
-
   let metadata;
   const metaFile = $("uploadMeta").files[0];
   if (metaFile) {
-    try {
-      metadata = JSON.parse(await metaFile.text());
-    } catch {
-      return toast("Invalid JSON sidecar", "error");
-    }
+    try { metadata = JSON.parse(await metaFile.text()); }
+    catch { return toast("Invalid JSON sidecar", "error"); }
   } else {
     metadata = {
       filename: audio.name,
-      annotator_id: annotatorInput.value.trim() || "anonymous",
+      annotator_id: profile.annotatorId || "anonymous",
+      label: "mixed",
     };
   }
-
-  const statusEl = $("uploadStatus");
-  statusEl.textContent = "Uploading\u2026";
+  $("uploadStatus").textContent = "Uploading…";
   const res = await uploadRecording(audio, metadata);
-  statusEl.textContent = res.ok ? "Done." : `Failed: ${res.error}`;
+  $("uploadStatus").textContent = res.ok ? "Done." : `Failed: ${res.error}`;
   toast(res.ok ? "Uploaded" : "Upload failed", res.ok ? "success" : "error");
+  if (res.ok) addRecording(metadata, "Uploaded");
 }
 
-$("uploadNowBtn").addEventListener("click", onUploadNow);
-$("uploadExistingBtn").addEventListener("click", onUploadExisting);
-
-// Persist annotator ID across sessions.
-annotatorInput.value = localStorage.getItem("annotator_id") || "";
-annotatorInput.addEventListener("change", () => {
-  localStorage.setItem("annotator_id", annotatorInput.value.trim());
-});
-
-renderAllChips();
-refreshGps();
+// ============================== BOOT ==============================
+initSetup();
+initRecord();
+initAnnotate();
+initDashboard();
+show(profile.annotatorId ? "record" : "setup");
+if (profile.annotatorId) refreshGps();
