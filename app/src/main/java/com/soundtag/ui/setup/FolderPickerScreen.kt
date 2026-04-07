@@ -2,6 +2,7 @@ package com.soundtag.ui.setup
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.CircularProgressIndicator
@@ -41,7 +43,10 @@ import com.soundtag.ui.theme.*
 @Composable
 fun FolderPickerScreen(
     folders: List<DriveFolder>?,
+    folderPath: List<Pair<String?, String>>,
+    onBrowseInto: (String, String) -> Unit,
     onSelect: (DriveFolder) -> Unit,
+    onSelectCurrent: () -> Unit,
     onUseDefault: () -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
@@ -50,6 +55,7 @@ fun FolderPickerScreen(
     val filteredFolders = folders?.filter {
         searchQuery.isBlank() || it.name.contains(searchQuery, ignoreCase = true)
     }
+    val isInsideFolder = folderPath.size > 1
 
     Column(
         modifier = modifier
@@ -82,6 +88,37 @@ fun FolderPickerScreen(
             )
         }
 
+        // Breadcrumb path
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            folderPath.forEachIndexed { index, (_, name) ->
+                if (index > 0) {
+                    Text(
+                        text = " \u203A ",
+                        fontSize = 13.sp,
+                        color = SoundTagTextTertiary
+                    )
+                }
+                val isLast = index == folderPath.lastIndex
+                Text(
+                    text = name,
+                    fontSize = 13.sp,
+                    fontWeight = if (isLast) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (isLast) SoundTagTextPrimary else SoundTagGreen,
+                    modifier = if (!isLast) Modifier.clickable {
+                        // Navigate back to this level — handled by repeated browseBack
+                    } else Modifier
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
         // Search bar
         Box(
             modifier = Modifier
@@ -94,11 +131,7 @@ fun FolderPickerScreen(
             contentAlignment = Alignment.CenterStart
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = "\uD83D\uDD0D",
-                    fontSize = 14.sp,
-                    color = SoundTagTextTertiary
-                )
+                Text(text = "\uD83D\uDD0D", fontSize = 14.sp, color = SoundTagTextTertiary)
                 Spacer(modifier = Modifier.width(10.dp))
                 Box(modifier = Modifier.weight(1f)) {
                     if (searchQuery.isEmpty()) {
@@ -112,10 +145,7 @@ fun FolderPickerScreen(
                         value = searchQuery,
                         onValueChange = { searchQuery = it },
                         singleLine = true,
-                        textStyle = TextStyle(
-                            fontSize = 15.sp,
-                            color = SoundTagTextPrimary
-                        ),
+                        textStyle = TextStyle(fontSize = 15.sp, color = SoundTagTextPrimary),
                         cursorBrush = SolidColor(SoundTagGreen),
                         modifier = Modifier.fillMaxWidth()
                     )
@@ -131,33 +161,55 @@ fun FolderPickerScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // Content
+        // "Select this folder" button when inside a subfolder
+        if (isInsideFolder) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .height(44.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(SoundTagGreen)
+                    .clickable(onClick = onSelectCurrent),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "\u2713 Select \"${folderPath.last().second}\"",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = SoundTagBackground
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+
+        // Folder list
         LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 20.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            // Use Default option
-            item {
-                FolderRow(
-                    name = "Use Default (SoundTag/)",
-                    isShared = false,
-                    nameColor = SoundTagGreen,
-                    onClick = onUseDefault
-                )
-                Spacer(modifier = Modifier.height(8.dp))
+            // Use Default option (only at root)
+            if (!isInsideFolder) {
+                item {
+                    FolderRow(
+                        name = "Use Default (SoundTag/)",
+                        isShared = false,
+                        nameColor = SoundTagGreen,
+                        showArrow = false,
+                        onClick = onUseDefault
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
             }
 
             if (filteredFolders == null) {
-                // Loading
                 item {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp),
+                        modifier = Modifier.fillMaxWidth().height(200.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         CircularProgressIndicator(
@@ -170,14 +222,12 @@ fun FolderPickerScreen(
             } else if (filteredFolders.isEmpty()) {
                 item {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 48.dp),
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 48.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = if (searchQuery.isNotBlank()) "No folders match \"$searchQuery\""
-                            else "No folders found",
+                            else "No subfolders",
                             fontSize = 14.sp,
                             color = SoundTagTextTertiary
                         )
@@ -188,7 +238,8 @@ fun FolderPickerScreen(
                     FolderRow(
                         name = folder.name,
                         isShared = folder.isShared,
-                        onClick = { onSelect(folder) }
+                        showArrow = true,
+                        onClick = { onBrowseInto(folder.id, folder.name) }
                     )
                 }
             }
@@ -200,6 +251,7 @@ fun FolderPickerScreen(
 private fun FolderRow(
     name: String,
     isShared: Boolean,
+    showArrow: Boolean,
     onClick: () -> Unit,
     nameColor: androidx.compose.ui.graphics.Color = SoundTagTextPrimary
 ) {
@@ -235,6 +287,10 @@ private fun FolderRow(
                     color = SoundTagGreen
                 )
             }
+            Spacer(modifier = Modifier.width(8.dp))
+        }
+        if (showArrow) {
+            Text(text = "\u203A", fontSize = 16.sp, color = SoundTagTextTertiary)
         }
     }
 }

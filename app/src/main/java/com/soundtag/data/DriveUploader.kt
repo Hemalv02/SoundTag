@@ -64,10 +64,24 @@ object DriveUploader {
         GoogleSignIn.getClient(context, gso).signOut().addOnCompleteListener { onComplete() }
     }
 
-    suspend fun listFolders(context: Context): List<DriveFolder> = withContext(Dispatchers.IO) {
+    suspend fun listFolders(context: Context, parentId: String? = null): List<DriveFolder> = withContext(Dispatchers.IO) {
         try {
             val driveService = buildDriveService(context) ?: return@withContext emptyList()
 
+            if (parentId != null) {
+                // Browsing inside a specific folder
+                return@withContext driveService.files().list()
+                    .setQ("mimeType='application/vnd.google-apps.folder' and '$parentId' in parents and trashed=false")
+                    .setSpaces("drive")
+                    .setFields("files(id, name)")
+                    .setPageSize(100)
+                    .execute()
+                    .files
+                    ?.map { DriveFolder(it.id, it.name, isShared = false) }
+                    ?: emptyList()
+            }
+
+            // Root level: own folders + shared folders
             val ownFolders = driveService.files().list()
                 .setQ("mimeType='application/vnd.google-apps.folder' and 'root' in parents and trashed=false")
                 .setSpaces("drive")

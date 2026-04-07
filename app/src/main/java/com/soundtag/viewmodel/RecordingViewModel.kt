@@ -90,6 +90,10 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
     private val _showFolderPicker = MutableStateFlow(false)
     val showFolderPicker: StateFlow<Boolean> = _showFolderPicker.asStateFlow()
 
+    // Breadcrumb: list of (id, name) pairs for navigation
+    private val _folderPath = MutableStateFlow<List<Pair<String?, String>>>(listOf(null to "My Drive"))
+    val folderPath: StateFlow<List<Pair<String?, String>>> = _folderPath.asStateFlow()
+
     // Dashboard
     private val _showDashboard = MutableStateFlow(false)
     val showDashboard: StateFlow<Boolean> = _showDashboard.asStateFlow()
@@ -133,14 +137,40 @@ class RecordingViewModel(application: Application) : AndroidViewModel(applicatio
 
     // Folder picker
     fun openFolderPicker() {
-        _driveFolders.value = null // show loading
+        _folderPath.value = listOf(null to "My Drive")
+        _driveFolders.value = null
         _showFolderPicker.value = true
         viewModelScope.launch {
-            _driveFolders.value = DriveUploader.listFolders(getApplication())
+            _driveFolders.value = DriveUploader.listFolders(getApplication(), parentId = null)
         }
     }
 
-    fun closeFolderPicker() { _showFolderPicker.value = false }
+    fun closeFolderPicker() {
+        _showFolderPicker.value = false
+        _folderPath.value = listOf(null to "My Drive")
+    }
+
+    fun browseIntoFolder(folderId: String, folderName: String) {
+        _folderPath.value = _folderPath.value + (folderId to folderName)
+        _driveFolders.value = null
+        viewModelScope.launch {
+            _driveFolders.value = DriveUploader.listFolders(getApplication(), parentId = folderId)
+        }
+    }
+
+    fun browseBack() {
+        val path = _folderPath.value
+        if (path.size <= 1) {
+            closeFolderPicker()
+            return
+        }
+        _folderPath.value = path.dropLast(1)
+        _driveFolders.value = null
+        val parentId = _folderPath.value.last().first
+        viewModelScope.launch {
+            _driveFolders.value = DriveUploader.listFolders(getApplication(), parentId = parentId)
+        }
+    }
 
     fun selectFolder(id: String, name: String) {
         prefs.customDriveFolderId = id

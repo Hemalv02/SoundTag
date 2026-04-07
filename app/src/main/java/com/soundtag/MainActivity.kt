@@ -88,6 +88,7 @@ class MainActivity : ComponentActivity() {
                 val customFolderName by vm.customFolderName.collectAsState()
                 val showFolderPicker by vm.showFolderPicker.collectAsState()
                 val driveFolders by vm.driveFolders.collectAsState()
+                val folderPath by vm.folderPath.collectAsState()
                 val todayCount by vm.todayCount.collectAsState()
                 val recordings by vm.recordings.collectAsState()
                 val totalCount by vm.totalCount.collectAsState()
@@ -150,12 +151,20 @@ class MainActivity : ComponentActivity() {
                             showFolderPicker -> {
                                 FolderPickerScreen(
                                     folders = driveFolders,
+                                    folderPath = folderPath,
+                                    onBrowseInto = { id, name -> vm.browseIntoFolder(id, name) },
                                     onSelect = { folder -> vm.selectFolder(folder.id, folder.name) },
+                                    onSelectCurrent = {
+                                        val current = folderPath.last()
+                                        if (current.first != null) {
+                                            vm.selectFolder(current.first!!, current.second)
+                                        }
+                                    },
                                     onUseDefault = {
                                         vm.clearCustomFolder()
                                         vm.closeFolderPicker()
                                     },
-                                    onBack = { vm.closeFolderPicker() }
+                                    onBack = { vm.browseBack() }
                                 )
                             }
                             showSetup -> {
