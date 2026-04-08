@@ -224,7 +224,7 @@ class RecordingService : LifecycleService() {
 
                 val calibratedDb = if (noiseFloor > 0f) {
                     (rawDb - noiseFloor).coerceAtLeast(0f)
-                } else rawDb
+                } else 0f // not enough samples yet, show 0
 
                 _currentDb.value = calibratedDb
                 if (calibratedDb > 0f) dbSamples.add(calibratedDb)
