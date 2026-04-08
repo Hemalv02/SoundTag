@@ -68,7 +68,6 @@ class RecordingService : LifecycleService() {
 
     private val dbSamples = mutableListOf<Float>()
     private val rawDbSamples = mutableListOf<Float>()
-    private var rollingMinDb = Float.MAX_VALUE
     private var mediaRecorder: MediaRecorder? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
@@ -152,7 +151,6 @@ class RecordingService : LifecycleService() {
                 _dbHistory.value = emptyList()
                 dbSamples.clear()
                 rawDbSamples.clear()
-                rollingMinDb = Float.MAX_VALUE
 
                 // 6. Start ticker
                 startTicker()
@@ -212,18 +210,21 @@ class RecordingService : LifecycleService() {
                 val seconds = _elapsedSeconds.value + 1
                 _elapsedSeconds.value = seconds
 
-                // Sample amplitude → dB with rolling minimum calibration
+                // Sample amplitude → dB with 10th percentile noise floor
                 val amp = mediaRecorder?.maxAmplitude ?: 0
                 val rawDb = if (amp > 0) (20 * log10(amp.toDouble())).toFloat() else 0f
 
-                if (rawDb > 0f) {
-                    rawDbSamples.add(rawDb)
-                    if (rawDb < rollingMinDb) rollingMinDb = rawDb
-                }
+                if (rawDb > 0f) rawDbSamples.add(rawDb)
 
-                val calibratedDb = if (rollingMinDb < Float.MAX_VALUE) {
-                    (rawDb - rollingMinDb).coerceAtLeast(0f)
+                // Compute noise floor as 10th percentile of all raw samples
+                val noiseFloor = if (rawDbSamples.size >= 3) {
+                    val sorted = rawDbSamples.sorted()
+                    sorted[(sorted.size * 0.1f).toInt().coerceIn(0, sorted.lastIndex)]
                 } else 0f
+
+                val calibratedDb = if (noiseFloor > 0f) {
+                    (rawDb - noiseFloor).coerceAtLeast(0f)
+                } else rawDb
 
                 _currentDb.value = calibratedDb
                 if (calibratedDb > 0f) dbSamples.add(calibratedDb)

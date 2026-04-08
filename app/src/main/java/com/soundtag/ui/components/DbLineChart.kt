@@ -31,7 +31,7 @@ import com.soundtag.ui.theme.SoundTagSurface
 fun DbLineChart(
     dbHistory: List<Float>,
     modifier: Modifier = Modifier,
-    maxDb: Float = 40f
+    maxDb: Float = 50f
 ) {
     if (dbHistory.size < 2) {
         // Empty state
