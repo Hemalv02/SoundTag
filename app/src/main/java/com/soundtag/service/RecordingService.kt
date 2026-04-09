@@ -53,10 +53,10 @@ class RecordingService : LifecycleService() {
         private val _dbStats = MutableStateFlow<DbStats?>(null)
         val dbStats: StateFlow<DbStats?> = _dbStats.asStateFlow()
 
-        private val _isCalibrating = MutableStateFlow(false)
-        val isCalibrating: StateFlow<Boolean> = _isCalibrating.asStateFlow()
+        private val _dbHistory = MutableStateFlow<List<Float>>(emptyList())
+        val dbHistory: StateFlow<List<Float>> = _dbHistory.asStateFlow()
 
-        private const val CALIBRATION_SECONDS = 3L
+        private const val MAX_HISTORY = 60 // show last 60 seconds
 
         const val ACTION_START = "com.soundtag.ACTION_START"
         const val ACTION_STOP = "com.soundtag.ACTION_STOP"
@@ -67,8 +67,7 @@ class RecordingService : LifecycleService() {
     }
 
     private val dbSamples = mutableListOf<Float>()
-    private val calibrationSamples = mutableListOf<Float>()
-    private var noiseFloorDb = 0f
+    private val rawDbSamples = mutableListOf<Float>()
     private var mediaRecorder: MediaRecorder? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private var tickerJob: Job? = null
@@ -149,10 +148,9 @@ class RecordingService : LifecycleService() {
                 _elapsedSeconds.value = 0L
                 _currentDb.value = 0f
                 _dbStats.value = null
-                _isCalibrating.value = true
+                _dbHistory.value = emptyList()
                 dbSamples.clear()
-                calibrationSamples.clear()
-                noiseFloorDb = 0f
+                rawDbSamples.clear()
 
                 // 6. Start ticker
                 startTicker()
@@ -199,6 +197,7 @@ class RecordingService : LifecycleService() {
         _state.value = RecordingState.Idle
         _elapsedSeconds.value = 0L
         _currentDb.value = 0f
+        _dbHistory.value = emptyList()
 
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -211,30 +210,37 @@ class RecordingService : LifecycleService() {
                 val seconds = _elapsedSeconds.value + 1
                 _elapsedSeconds.value = seconds
 
-                // Sample amplitude → dB with calibration
+                // Sample amplitude → dB with 10th percentile noise floor
                 val amp = mediaRecorder?.maxAmplitude ?: 0
                 val rawDb = if (amp > 0) (20 * log10(amp.toDouble())).toFloat() else 0f
 
-                if (seconds <= CALIBRATION_SECONDS) {
-                    // Calibration phase: collect noise floor samples
-                    if (rawDb > 0f) calibrationSamples.add(rawDb)
-                    _currentDb.value = 0f
-                    if (seconds == CALIBRATION_SECONDS && calibrationSamples.isNotEmpty()) {
-                        noiseFloorDb = calibrationSamples.average().toFloat()
-                        _isCalibrating.value = false
-                    }
-                } else {
-                    // Calibrated phase: subtract noise floor
-                    val calibratedDb = (rawDb - noiseFloorDb).coerceAtLeast(0f)
-                    _currentDb.value = calibratedDb
-                    if (calibratedDb > 0f) dbSamples.add(calibratedDb)
-                }
-                val displayDb = _currentDb.value
+                if (rawDb > 0f) rawDbSamples.add(rawDb)
+
+                // Compute noise floor as 10th percentile of all raw samples
+                val noiseFloor = if (rawDbSamples.size >= 3) {
+                    val sorted = rawDbSamples.sorted()
+                    sorted[(sorted.size * 0.1f).toInt().coerceIn(0, sorted.lastIndex)]
+                } else 0f
+
+                val calibratedDb = if (noiseFloor > 0f) {
+                    (rawDb - noiseFloor).coerceAtLeast(0f)
+                } else 0f // not enough samples yet, show 0
+
+                _currentDb.value = calibratedDb
+                if (calibratedDb > 0f) dbSamples.add(calibratedDb)
+
+                // Append to history (keep last MAX_HISTORY points)
+                val history = _dbHistory.value.toMutableList()
+                history.add(calibratedDb)
+                if (history.size > MAX_HISTORY) history.removeAt(0)
+                _dbHistory.value = history
+
+                val displayDb = calibratedDb
 
                 // Update notification
                 val mm = seconds / 60
                 val ss = seconds % 60
-                val dbText = if (displayDb > 0 && seconds > CALIBRATION_SECONDS) " \u00B7 ${displayDb.toInt()} dB" else ""
+                val dbText = if (displayDb > 0) " \u00B7 +${displayDb.toInt()} dB" else ""
                 val timeText = "%02d:%02d".format(mm, ss)
                 val notification = buildNotification("Recording... $timeText$dbText")
                 val nm = getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager

@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.soundtag.R
 import com.soundtag.data.LocationFix
+import com.soundtag.ui.components.DbLineChart
 import com.soundtag.ui.theme.*
 
 @Composable
@@ -41,7 +42,7 @@ fun RecordScreen(
     annotatorId: String,
     todayCount: Int,
     currentDb: Float,
-    isCalibrating: Boolean,
+    dbHistory: List<Float>,
     onToggleRecording: () -> Unit,
     onDashboardTap: () -> Unit,
     modifier: Modifier = Modifier
@@ -123,13 +124,7 @@ fun RecordScreen(
                                 fontFamily = FontFamily.Monospace,
                                 color = SoundTagTextPrimary
                             )
-                            if (isCalibrating) {
-                                Text(
-                                    text = "Calibrating\u2026",
-                                    fontSize = 12.sp,
-                                    color = SoundTagTextTertiary
-                                )
-                            } else if (currentDb > 0) {
+                            if (currentDb > 0) {
                                 val dbColor = when {
                                     currentDb >= 25 -> SoundTagError
                                     currentDb >= 10 -> SoundTagWarning
@@ -165,9 +160,12 @@ fun RecordScreen(
                         color = SoundTagTextSecondary
                     )
                 }
-                Spacer(modifier = Modifier.height(24.dp))
-                // Waveform visualization (decorative)
-                WaveformBars()
+                Spacer(modifier = Modifier.height(16.dp))
+                // Live dB chart
+                DbLineChart(
+                    dbHistory = dbHistory,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                )
             } else {
                 Text(
                     text = "Tap to start recording",
